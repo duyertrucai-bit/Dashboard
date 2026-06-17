@@ -1176,6 +1176,34 @@ let META_NOV   = parseFloat(localStorage.getItem('sac_meta_nov')  || 3);
 let META_DESP  = parseFloat(localStorage.getItem('sac_meta_desp') || 1);
 let refreshInterval = null;
 
+// ── JSONP helper — evita bloqueo CORS de Google Apps Script ───
+function gasRequest(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_gasCb_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    const timeout = setTimeout(() => {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('Timeout JSONP'));
+    }, 15000);
+    window[cbName] = function(data) {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cbName);
+    const script = document.createElement('script');
+    script.src = SCRIPT_URL + '?' + qs.toString();
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      reject(new Error('Error cargando script JSONP'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
 // ── DATOS FALLBACK (del Excel original) ───────────────────────
 const FALLBACK = {
   ventas_nov: [
@@ -1647,15 +1675,13 @@ async function syncData() {
   btn.querySelector('.icon').textContent = '⟳';
   try {
     // v7: getDashboard ya incluye % calculados por Sheets + notas + _motivoRaw
-    const resDash = await fetch(SCRIPT_URL + '?action=getDashboard', { cache:'no-store', redirect:'follow' });
-    const jsonDash = await resDash.json();
+    const jsonDash = await gasRequest({ action: 'getDashboard' });
     if (jsonDash.error) throw new Error(jsonDash.error);
 
     // Si _motivoRaw ya viene en el dashboard (v7+), usarlo directamente.
     // Si no, hacer la llamada separada para compatibilidad con versiones anteriores.
     if (!Array.isArray(jsonDash._motivoRaw)) {
-      const resMot = await fetch(SCRIPT_URL + '?action=getMotivoDevolucion', { cache:'no-store', redirect:'follow' });
-      const jsonMot = await resMot.json();
+      const jsonMot = await gasRequest({ action: 'getMotivoDevolucion' });
       jsonDash._motivoRaw = Array.isArray(jsonMot) ? jsonMot : [];
     }
 
@@ -2115,8 +2141,8 @@ function updateFormDropdowns(json) {
 async function fetchAlerts() {
   if (!SCRIPT_URL) return;
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=getAlerts', { redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'getAlerts' });
+    const json = res;
     renderAlerts(json.alerts || []);
   } catch(e) {}
 }
@@ -3763,8 +3789,8 @@ async function loadEditRows() {
   document.getElementById('edit-form-card').style.display  = 'none';
 
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=getFilas&hoja=' + encodeURIComponent(SHEET_META[_editSheet].nombre), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'getFilas', hoja: SHEET_META[_editSheet].nombre });
+    const json = res;
     if (json.error) { msgEl.className='msg-error'; msgEl.textContent='❌ '+json.error; return; }
 
     _editRows    = json.filas  || [];
@@ -3975,8 +4001,8 @@ async function guardarEdicion() {
 
     showMsg('msg-edit-form', '⏳ Guardando nueva fila...', 'ok');
     try {
-      const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-      const json = await res.json();
+      const res  = await gasRequest(Object.fromEntries(params));
+      const json = res;
       if (json.ok || json === true) {
         showMsg('msg-edit-form', '✅ Nueva fila agregada a Google Sheets', 'ok');
         setTimeout(() => { cerrarFormEdicion(); loadEditRows(); }, 1500);
@@ -4004,8 +4030,8 @@ async function guardarEdicion() {
       filaIndex: _editRowIdx + 2,
       valores:   JSON.stringify(rowOrig),
     });
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok) {
       showMsg('msg-edit-form', '✅ Registro actualizado en Google Sheets', 'ok');
       _editRows[_editRowIdx] = rowOrig;
@@ -4039,8 +4065,8 @@ async function eliminarEdicion() {
       hoja:      meta.nombre,
       filaIndex: _editRowIdx + 2,
     });
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok) {
       showMsg('msg-edit-form', '✅ Registro eliminado', 'ok');
       _editRows.splice(_editRowIdx, 1);
@@ -4114,8 +4140,8 @@ async function papeleraSyncItemToSheet(item) {
       valores:   JSON.stringify(item.valores),
       deletedAt: item.deletedAt,
     });
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok) {
       item.synced = true;
       papeleraSaveLocal();
@@ -4128,8 +4154,8 @@ async function syncPapelera() {
   showMsg('msg-papelera', '⏳ Sincronizando con Google Sheets...', 'ok');
   if (!SCRIPT_URL) { showMsg('msg-papelera','⚠️ Configura la URL del Script primero','err'); return; }
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=getPapelera', { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'getPapelera' });
+    const json = res;
     if (json.error) { showMsg('msg-papelera','❌ '+json.error,'err'); return; }
 
     const cutoff    = Date.now() - PAPELERA_MS;
@@ -4162,8 +4188,8 @@ async function restaurarItem(id) {
       hoja:     item.hoja,
       valores:  JSON.stringify(item.valores),
     });
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok) {
       // Remove from papelera
       _papeleraItems = _papeleraItems.filter(i => i.id !== id);
@@ -4185,7 +4211,7 @@ async function eliminarDefinitivo(id) {
   if (!confirm('⚠️ ¿Eliminar permanentemente este registro?\n\nNo podrás recuperarlo después.')) return;
   if (SCRIPT_URL) {
     try {
-      await fetch(SCRIPT_URL + '?action=eliminarPapelera&id=' + encodeURIComponent(id), { cache:'no-store', redirect:'follow' });
+      await gasRequest({ action: 'eliminarPapelera', id: id });
     } catch(e) {}
   }
   _papeleraItems = _papeleraItems.filter(i => i.id !== id);
@@ -4331,8 +4357,8 @@ async function postDevolucion() {
       ventasMes:     ventas, valorDevuelto: valor,
       unidades, motivo, obs
     });
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache: 'no-store', redirect: 'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok) {
       showMsg('msg-dev', `✅ Devolución guardada — $${valor.toLocaleString('es-CO')} / ${prod} / ${mes}`, 'ok');
       document.getElementById('dev-ventas').value   = '';
@@ -4399,8 +4425,8 @@ async function postDespacho() {
 // ── Todas las escrituras van por GET (sin Content-Type → sin CORS) ──
 async function getAction(params, msgId, okMsg) {
   try {
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (json.ok || json === true) {
       showMsg(msgId, okMsg, 'ok');
       setTimeout(() => syncData(), 1200);
@@ -4450,8 +4476,8 @@ async function guardarObservacion(hoja, mes, inputId, val) {
   const nombreHoja = hoja === 'novedades' ? '🔄 Novedades' : '📈 Ventas';
   try {
     // Obtener filas actuales para encontrar la primera fila del mes
-    const res = await fetch(SCRIPT_URL + '?action=getFilas&hoja=' + encodeURIComponent(nombreHoja), { cache: 'no-store', redirect: 'follow' });
-    const json = await res.json();
+    const res = await gasRequest({ action: 'getFilas', hoja: nombreHoja });
+    const json = res;
     if (json.error) { showObsMsg('❌ Error al leer filas: ' + json.error, false); return; }
 
     const filas   = json.filas   || [];
@@ -4487,8 +4513,8 @@ async function guardarObservacion(hoja, mes, inputId, val) {
       filaIndex: i + 2,  // +2: fila 1 = encabezado, índice 0-based → fila real
       valores:   JSON.stringify(nuevaFila),
     });
-    const res2  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache: 'no-store', redirect: 'follow' });
-    const json2 = await res2.json();
+    const res2  = await gasRequest(Object.fromEntries(params));
+    const json2 = res2;
 
     if (json2.ok) {
       showObsMsg('✅ Guardado en Google Sheets', true);
@@ -4514,8 +4540,8 @@ function showMsg(id, txt, type) {
 async function testConnection() {
   showMsg('msg-cfg','🔄 Verificando conexión...','ok');
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=getData', { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'getData' });
+    const json = res;
     if (json.error) {
       showMsg('msg-cfg', '❌ ' + json.error, 'err');
     } else {
@@ -4662,8 +4688,8 @@ async function subirExcel() {
       tipo, mes, anio,
       filas: JSON.stringify(dataRows)
     });
-    const res  = await fetch(SCRIPT_URL + '?' + loteParams.toString(), { cache: 'no-store', redirect: 'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(loteParams));
+    const json = res;
     if (json.ok) {
       showMsg('msg-xl', json.msg, 'ok');
       // Agregar al historial
@@ -4697,8 +4723,8 @@ let _notaEditId  = null;
 async function loadNotas() {
   if (!SCRIPT_URL) { showMsg('msg-nota','⚠️ Configura la URL del Script primero','warn'); return; }
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=getNotas', { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'getNotas' });
+    const json = res;
     _notasCache = json.items || [];
     renderNotas(_notasCache);
   } catch(e) {
@@ -4795,8 +4821,8 @@ async function guardarNota() {
   });
 
   try {
-    const res  = await fetch(SCRIPT_URL + '?' + params.toString(), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest(Object.fromEntries(params));
+    const json = res;
     if (!json.ok) throw new Error(json.msg || 'Error al guardar');
     showMsg('msg-nota', json.msg || '✅ Nota guardada', 'ok');
     // Limpiar form
@@ -4830,8 +4856,8 @@ function editarNota(id) {
 async function eliminarNota(id) {
   if (!confirm('¿Eliminar esta nota permanentemente de Google Sheets?')) return;
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=eliminarNota&id=' + encodeURIComponent(id), { cache:'no-store', redirect:'follow' });
-    const json = await res.json();
+    const res  = await gasRequest({ action: 'eliminarNota', id: id });
+    const json = res;
     if (!json.ok) throw new Error(json.msg || 'Error al eliminar');
     _notasCache = _notasCache.filter(n => String(n['ID']||n.id) !== String(id));
     renderNotas(_notasCache);
