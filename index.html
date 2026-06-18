@@ -560,11 +560,7 @@ tbody td { padding: 11px 12px; }
 
   <!-- ─ DESPACHOS ───────────────────────────────────────── -->
   <div id="view-despachos" class="view">
-    <!-- DEBUG PANEL — se elimina cuando funcione -->
-    <div id="debug-desp-panel" style="background:#1e1e2e;border:2px solid #ff79c6;border-radius:10px;padding:16px;margin-bottom:18px;font-family:monospace;font-size:12px;color:#cdd6f4">
-      <div style="color:#ff79c6;font-weight:700;margin-bottom:8px">🔍 DEBUG — estructura JSON recibida del backend</div>
-      <div id="debug-desp-content" style="white-space:pre-wrap;color:#a6e3a1">Sincroniza datos (↻) para ver el debug...</div>
-    </div>
+
     <div class="kpi-grid" id="kpi-desp"></div>
     <div class="chart-grid-2">
       <div class="card">
@@ -1739,34 +1735,7 @@ async function syncData() {
 // Code_v7.gs devuelve % y estados listos; NO recalcular en JS.
 // Si _fromSheets === true, los porcentajes ya están en escala % (no fracción).
 function parseDashboardData(json) {
-  // ── DEBUG TEMPORAL — abrir Consola del navegador (F12 > Console) ──
-  console.group('DEBUG parseDashboardData');
-  console.log('Keys JSON raiz:', Object.keys(json));
-  console.log('novedades[0]:', (json.novedades||[])[0]);
-  console.log('despachosMensual[0]:', (json.despachosMensual||[])[0]);
-  console.log('despachos[0]:', (json.despachos||[])[0]);
-  console.groupEnd();
-  // ── Panel debug visible en UI ──
-  setTimeout(() => {
-    const dbPanel = document.getElementById('debug-desp-content');
-    if (dbPanel) {
-      const info = {
-        'Keys raíz': Object.keys(json),
-        'novedades length': (json.novedades||[]).length,
-        'novedades[0]': (json.novedades||[])[0] || 'VACÍO',
-        'productoNovedades (type)': typeof json.productoNovedades,
-        'productoNovedades (primeros 2)': Array.isArray(json.productoNovedades)
-          ? (json.productoNovedades||[]).slice(0,2)
-          : json.productoNovedades,
-        'despachosMensual length': (json.despachosMensual||[]).length,
-        'despachosMensual[0] COMPLETO': (json.despachosMensual||[])[0] || 'VACÍO',
-        'despachosMensual[1]': (json.despachosMensual||[])[1] || 'VACÍO',
-        'mesesKeys': json.mesesKeys,
-      };
-      dbPanel.textContent = JSON.stringify(info, null, 2);
-    }
-  }, 500);
-  // ── FIN DEBUG ──
+
   const ORDEN = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
