@@ -1430,9 +1430,9 @@ function getQuarterAnnotations(labels) {
 
 // ── CHART HELPERS ─────────────────────────────────────────────
 const CHT = {
-  font: "'Syne', sans-serif",
-  grid: 'rgba(26,45,74,0.7)',
-  tick: '#6888aa',
+  font: "'Inter', sans-serif",
+  grid: 'rgba(0,0,0,0.07)',
+  tick: '#94a3b8',
   tt: {
     backgroundColor:'rgba(8,14,30,0.97)',
     borderColor:'rgba(0,198,255,0.35)', borderWidth:1,
@@ -1925,6 +1925,7 @@ function parseDashboardData(json) {
   const devArr = (json.devResumen || []).map(r => ({
     mes: r.mes, ventas: r.ventas, devTotal: r.devTotal,
     pct: r.pct, estado: r.estado || '',
+    textoAuto: r.textoAuto || r.observacion || r['Observacion'] || '',
     porProducto: r.porProducto || {},
   }));
 
@@ -1945,6 +1946,19 @@ function parseDashboardData(json) {
     if (r['Observacion'] && !obsNovFB[key]) obsNovFB[key] = String(r['Observacion']);
   });
 
+  // Extraer observaciones de despachos (por mes)
+  const obsDespFB = {};
+  (json.despachosMensual || []).forEach(r => {
+    if (r.textoAuto && r.mes) obsDespFB[r.mes] = String(r.textoAuto);
+  });
+
+  // Extraer observaciones de devoluciones (por mes)
+  const obsDevFB = {};
+  (json.devResumen || []).forEach(r => {
+    const obs = r.textoAuto || r.observacion || r['Observacion'] || '';
+    if (obs && r.mes) obsDevFB[r.mes] = String(obs);
+  });
+
   return {
     ventas_nov:          vn.length ? vn : FALLBACK.ventas_nov,
     despachos:           dp.length ? dp : FALLBACK.despachos,
@@ -1955,6 +1969,8 @@ function parseDashboardData(json) {
     _notas:              json.notas || [],
     _obsVentas:          Object.assign({}, obsResumen, obsVentasFB),
     _obsNovedades:       obsNovFB,
+    _obsDespachos:       obsDespFB,
+    _obsDevoluciones:    obsDevFB,
     _raw:                json,
   };
 }
@@ -2304,14 +2320,20 @@ function renderResumen(d) {
     data:{
       labels: labelsDual,
       datasets:[
-        { label:'% Novedad', data:vn.map(r=>r.pct), borderColor:'#ffb020', backgroundColor:'rgba(255,176,32,0.1)', tension:.4, pointRadius:5, pointHoverRadius:8, fill:true },
-        { label:'Meta Novedad ('+META_NOV+'%)', data:vn.map(()=>META_NOV), borderColor:'rgba(255,61,90,0.5)', borderDash:[6,3], pointRadius:0, fill:false },
-        { label:'% Despacho', data:dp.map(r=>r.pct), borderColor:'#00e5a0', backgroundColor:'rgba(0,229,160,0.07)', tension:.4, pointRadius:5, pointHoverRadius:8, fill:true },
-        { label:'Meta Despacho ('+META_DESP+'%)', data:dp.map(()=>META_DESP), borderColor:'rgba(255,61,90,0.4)', borderDash:[4,4], pointRadius:0, fill:false },
+        { label:'% Novedad', data:vn.map(r=>r.pct), borderColor:'#ffb020', backgroundColor:'rgba(255,176,32,0.1)', tension:.4, pointRadius:5, pointHoverRadius:8, fill:true, yAxisID:'yNov' },
+        { label:'Meta Nov ('+META_NOV+'%)', data:vn.map(()=>META_NOV), borderColor:'rgba(255,61,90,0.7)', borderDash:[6,3], borderWidth:2, pointRadius:0, fill:false, yAxisID:'yNov' },
+        { label:'% Despacho', data:dp.map(r=>r.pct), borderColor:'#00e5a0', backgroundColor:'rgba(0,229,160,0.07)', tension:.4, pointRadius:5, pointHoverRadius:8, fill:true, yAxisID:'yDesp' },
+        { label:'Meta Desp ('+META_DESP+'%)', data:dp.map(()=>META_DESP), borderColor:'rgba(255,61,90,0.5)', borderDash:[4,4], borderWidth:2, pointRadius:0, fill:false, yAxisID:'yDesp' },
       ]
     },
-    options: { ...baseOpts({}, true),
-      plugins:{ ...baseOpts({},true).plugins,
+    options: { ...baseOpts({}, false),
+      scales:{
+        x:{ grid:{color:CHT.grid}, ticks:{color:CHT.tick, font:{family:CHT.font}} },
+        yNov:{ position:'left',  grid:{color:CHT.grid}, ticks:{ color:CHT.tick, font:{family:CHT.font}, callback: v=>v.toFixed(2)+'%' }, title:{display:true,text:'% Novedad',color:'#ffb020',font:{size:10}} },
+        yDesp:{ position:'right', grid:{display:false},  ticks:{ color:CHT.tick, font:{family:CHT.font}, callback: v=>v.toFixed(2)+'%' }, title:{display:true,text:'% Despacho',color:'#00e5a0',font:{size:10}} },
+      },
+      plugins:{ ...baseOpts({},false).plugins,
+        legend:{ labels:{ color:'#334155', font:{family:CHT.font,size:12} }},
         annotation:{ annotations: qAnnotDual },
         tooltip:{ ...CHT.tt, mode:'index', intersect:false,
           callbacks:{
@@ -2358,12 +2380,8 @@ function renderResumen(d) {
     qRows[q].ventasD    += (typeof dp.ventas==='number'?dp.ventas:0);
   });
 
-  // Leer observaciones para tabla resumen — prioridad: manual > Sheet > auto-generada > textoAuto
-  const obsVRes   = Object.assign({}, _OBS_LOCAL.ventas      || {}, (d._obsVentas  || {}));
-  const obsDRes   = Object.assign({}, _OBS_LOCAL.despachos   || {});
-  // Construir índice textoAuto por mes (desde despachosMensual del backend)
-  const textoAutoByMes = {};
-  (d.despachos || []).forEach(r => { if (r.textoAuto) textoAutoByMes[r.mes] = r.textoAuto; });
+  // Leer observaciones para tabla resumen — solo de ventas/resumenMensual (su hoja propia)
+  const obsVRes = Object.assign({}, _OBS_LOCAL.ventas || {}, (d._obsVentas || {}));
 
   let tblRows = '';
   let lastQR = null;
@@ -2373,7 +2391,7 @@ function renderResumen(d) {
     const dpRow = dp[i]||{errores:'—',pct:'—'};
     const novOk = r.pct <= META_NOV;
     const despOk = typeof dpRow.pct==='number' ? dpRow.pct<=META_DESP : true;
-    const obsVal  = (obsDRes[r.mes] || obsVRes[r.mes] || textoAutoByMes[r.mes] || '').replace(/"/g, '&quot;');
+    const obsVal  = (obsVRes[r.mes] || '').replace(/"/g, '&quot;');
     const obsId   = `obs-res-${i}`;
 
     // Encabezado de trimestre
@@ -2402,23 +2420,8 @@ function renderResumen(d) {
       <td>${dpRow.errores}</td>
       <td style="color:${despOk?'var(--success)':'var(--danger)'};font-weight:800">${dpRow.pct}%</td>
       <td><span class="badge badge-${despOk?'ok':'danger'}">${despOk?'✅ OK':'🔴 ALERTA'}</span></td>
-      <td style="min-width:200px;padding:6px 8px">
-        <div style="position:relative;display:flex;align-items:center">
-          <input id="${obsId}" type="text" value="${obsVal}"
-            placeholder="Observación…"
-            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);
-                   border-radius:6px;color:#ddeeff;font-size:11px;padding:5px 28px 5px 8px;outline:none;transition:border .2s"
-            onfocus="this.style.borderColor='var(--accent)'"
-            onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();guardarObservacion('ventas','${r.mes}','${obsId}',this.value)}"
-          />
-          <button title="Guardar en Sheets"
-            onclick="guardarObservacion('ventas','${r.mes}','${obsId}',document.getElementById('${obsId}').value)"
-            style="position:absolute;right:4px;top:50%;transform:translateY(-50%);
-                   background:none;border:none;cursor:pointer;font-size:14px;opacity:.6;padding:2px"
-            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.6">💾</button>
-        </div>
-        <div id="obs-msg-${obsId}" style="font-size:10px;height:12px;margin-top:2px;color:var(--success)"></div>
+      <td style="min-width:240px;padding:8px 12px">
+        ${renderObsCell(obsVal.replace(/&quot;/g,'"'))}
       </td>
     </tr>`;
   });
@@ -2437,16 +2440,33 @@ function renderResumen(d) {
   </tr>`;
 
   document.getElementById('tbl-resumen').innerHTML = `
-  <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;padding:6px 10px;
-              background:rgba(0,198,255,0.06);border:1px solid rgba(0,198,255,0.15);border-radius:6px">
-    💡 <strong style="color:var(--accent)">Observaciones:</strong>
-    Escribe y presiona <kbd style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px">Enter</kbd>
-    o 💾 para guardar en tiempo real en Google Sheets.
-  </div>
   <table>
     <thead><tr><th>Mes</th><th>Ventas</th><th>Novedades</th><th>% Novedad</th><th>Estado Nov.</th><th>Errores Desp.</th><th>% Despacho</th><th>Estado Desp.</th><th>📝 Observación</th></tr></thead>
     <tbody>${tblRows}</tbody>
   </table>`;
+}
+
+// ── HELPER: renderizar celda de observación (soporta texto simple y separado por |) ──
+function renderObsCell(raw) {
+  if (!raw) return '<span style="font-size:11px;color:var(--text-dim);font-style:italic">—</span>';
+  const partes = raw.split('|').map(s => s.trim()).filter(Boolean);
+  if (partes.length > 1) {
+    const chips = partes.map(p => {
+      const col = (p.includes('🔴')||p.includes('⚠️')||p.includes('🔥')||/revisar|crítico|sobre meta|alerta/i.test(p))
+                  ? 'var(--danger)'
+                  : (p.includes('🟢')||p.includes('✅')||/excelente|sin incidencia|cumpl/i.test(p))
+                  ? 'var(--success)'
+                  : (p.includes('🟡')||/cerca|límite/i.test(p))
+                  ? 'var(--warn)'
+                  : 'var(--text-dim)';
+      return `<span style="font-size:11px;color:${col};line-height:1.45;display:block">${p}</span>`;
+    }).join('');
+    return `<div style="display:flex;flex-direction:column;gap:2px">${chips}</div>`;
+  }
+  const col2 = /excelente|cumpl|superó/i.test(raw) ? 'var(--success)'
+             : /alerta|crítico|sobre meta|revisar/i.test(raw) ? 'var(--danger)'
+             : 'var(--text)';
+  return `<span style="font-size:12px;color:${col2};line-height:1.55;font-weight:500">${raw}</span>`;
 }
 
 // ── NOVEDADES ─────────────────────────────────────────────────
@@ -2471,29 +2491,40 @@ function renderNovedades(d) {
   mkChart('ch-nov-pct', {
     type:'bar',
     data:{ labels: labelsNov,
-      datasets:[{ label:'% Novedad', data:vn.map(r=>r.pct), backgroundColor:colors, borderRadius:10, borderSkipped:false }]
+      datasets:[
+        { label:'% Novedad', data:vn.map(r=>r.pct), backgroundColor:colors, borderRadius:10, borderSkipped:false, order:2 },
+        { label:'Meta '+META_NOV+'%', data:vn.map(()=>META_NOV), type:'line',
+          borderColor:'rgba(220,38,38,0.85)', borderWidth:2.5, borderDash:[7,4],
+          pointRadius:0, fill:false, order:1,
+          datalabels:{ display:false }
+        },
+      ]
     },
-    options:{ ...baseOpts({}, true), plugins:{ ...baseOpts({},true).plugins,
-      annotation:{ annotations:{ ...qAnnotNov, line1:{ type:'line', yMin:META_NOV, yMax:META_NOV,
-        borderColor:'rgba(255,61,90,0.7)', borderWidth:2, borderDash:[6,3],
-        label:{ display:true, content:'Meta '+META_NOV+'%', color:'#ff3d5a', position:'end', font:{size:11} }
-      }}},
-      tooltip:{ ...CHT.tt,
-        callbacks:{
-          title: items => '📅 ' + items[0].label,
-          label: ctx => {
-            const r = vn[ctx.dataIndex] || {};
-            const sobremeta = (r.pct||0) - META_NOV;
-            return [
-              ` 🔄 % Novedad: ${fmtPct(r.pct||0)}  ${semaforo(r.pct||0, META_NOV)}`,
-              ` 🛒 Ventas: ${fmtNum(r.ventas||0)} unidades`,
-              ` 📦 Novedades: ${fmtNum(r.novedades||0)}`,
-              ` 🎯 vs Meta (${META_NOV}%): ${sobremeta > 0 ? '+'+sobremeta.toFixed(2)+'% ⚠️ SOBRE' : sobremeta.toFixed(2)+'% ✅ OK'}`,
-            ];
+    options:{ ...baseOpts({}, true),
+      plugins:{ ...baseOpts({},true).plugins,
+        legend:{ display:true, labels:{ color:'#334155', font:{family:CHT.font,size:12},
+          filter: item => item.datasetIndex === 0
+        }},
+        annotation:{ annotations: qAnnotNov },
+        tooltip:{ ...CHT.tt,
+          callbacks:{
+            title: items => '📅 ' + items[0].label,
+            label: ctx => {
+              if (ctx.datasetIndex === 1) return null;
+              const r = vn[ctx.dataIndex] || {};
+              const sobremeta = (r.pct||0) - META_NOV;
+              return [
+                ` 🔄 % Novedad: ${fmtPct(r.pct||0)}  ${semaforo(r.pct||0, META_NOV)}`,
+                ` 🛒 Ventas: ${fmtNum(r.ventas||0)} unidades`,
+                ` 📦 Novedades: ${fmtNum(r.novedades||0)}`,
+                ` 🎯 vs Meta (${META_NOV}%): ${sobremeta > 0 ? '+'+sobremeta.toFixed(2)+'% ⚠️ SOBRE' : sobremeta.toFixed(2)+'% ✅ OK'}`,
+              ];
+            },
+            filter: item => item.datasetIndex === 0,
           }
         }
       }
-    }}
+    }
   });
 
   mkChart('ch-ventas-trend', {
@@ -2523,7 +2554,7 @@ function renderNovedades(d) {
     }}
   });
 
-  // Leer observaciones: prioridad Sheets → localStorage
+  // Leer observaciones: solo de la hoja Novedades (su fuente propia)
   const obsNov = Object.assign({}, _OBS_LOCAL.novedades || {}, (d._obsNovedades || {}));
 
   let lastQNov = null;
@@ -2548,37 +2579,15 @@ function renderNovedades(d) {
       <td style="color:${ok?'var(--success)':'var(--danger)'};font-weight:800">${r.pct}%</td>
       <td style="color:${ok?'var(--success)':'var(--danger)'}">${vs>0?'+':''}${vs}%</td>
       <td><span class="badge badge-${ok?'ok':'danger'}">${ok?'🟢 OK':'🛑 ALERTA'}</span></td>
-      <td style="min-width:220px;padding:6px 8px">
-        <div style="position:relative;display:flex;align-items:center;gap:6px">
-          <input id="${obsId}" type="text" value="${obsVal}"
-            placeholder="Agregar observación…"
-            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);
-                   border-radius:6px;color:#ddeeff;font-size:11px;padding:5px 28px 5px 8px;
-                   outline:none;transition:border .2s"
-            onfocus="this.style.borderColor='var(--accent)'"
-            onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();guardarObservacion('novedades','${r.mes}','${obsId}',this.value)}"
-          />
-          <button title="Guardar observación en Google Sheets"
-            onclick="guardarObservacion('novedades','${r.mes}','${obsId}',document.getElementById('${obsId}').value)"
-            style="position:absolute;right:4px;top:50%;transform:translateY(-50%);
-                   background:none;border:none;cursor:pointer;font-size:14px;opacity:.6;padding:2px"
-            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.6">💾</button>
-        </div>
-        <div id="obs-msg-${obsId}" style="font-size:10px;height:12px;margin-top:2px;color:var(--success)"></div>
+      <td style="min-width:240px;padding:8px 12px">
+        ${renderObsCell(obsVal.replace(/&quot;/g,'"'))}
       </td>
     </tr>`;
   });
 
   document.getElementById('tbl-nov').innerHTML = `
-  <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;padding:6px 10px;
-              background:rgba(0,198,255,0.06);border:1px solid rgba(0,198,255,0.15);border-radius:6px">
-    💡 <strong style="color:var(--accent)">Observaciones:</strong>
-    Escribe en el campo y presiona <kbd style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px">Enter</kbd>
-    o el ícono 💾 para guardar directamente en Google Sheets en tiempo real.
-  </div>
   <table>
-    <thead><tr><th>Mes</th><th>Ventas</th><th>Novedades</th><th>% Novedad</th><th>vs Meta (${META_NOV}%)</th><th>Semáforo</th><th>📝 Observación (editable)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Ventas</th><th>Novedades</th><th>% Novedad</th><th>vs Meta (${META_NOV}%)</th><th>Semáforo</th><th>📝 Observación</th></tr></thead>
     <tbody>${novTblRows}</tbody>
   </table>`;
 }
@@ -2672,7 +2681,7 @@ function buildCambiosChart(filteredKeys) {
       options:{
         responsive:true, maintainAspectRatio:true,
         plugins:{
-          legend:{ labels:{ color:'#ffffff', font:{family:CHT.font,size:12} }},
+          legend:{ labels:{ color:'#334155', font:{family:CHT.font,size:12} }},
           tooltip:{ ...CHT.tt, callbacks:{
             title: items => '📦 ' + items[0].label,
             label: ctx => {
@@ -3019,6 +3028,11 @@ function renderDespachos(d) {
     }}
   });
 
+  // Observaciones: solo de la hoja Despachos (textoAuto de despachosMensual)
+  const textoAutoByMesDesp = {};
+  dp.forEach(r => { if (r.textoAuto) textoAutoByMesDesp[r.mes] = r.textoAuto; });
+  const obsDesp = Object.assign({}, textoAutoByMesDesp, _OBS_LOCAL.despachos || {}, (d._obsDespachos || {}));
+
   let lastQD = null;
   let despTblRows = '';
   dp.forEach((r,i) => {
@@ -3029,7 +3043,7 @@ function renderDespachos(d) {
     const vary=prev?((r.pct-prev.pct).toFixed(2)):'—';
     if (q && q !== lastQD) {
       despTblRows += `<tr style="background:rgba(0,198,255,0.06);border-top:2px solid rgba(0,198,255,0.2)">
-        <td colspan="7" style="padding:7px 12px;font-size:10px;font-weight:900;letter-spacing:1.5px;color:var(--accent)">
+        <td colspan="8" style="padding:7px 12px;font-size:10px;font-weight:900;letter-spacing:1.5px;color:var(--accent)">
           ▌ Q${q} — ${TRIM_NOMBRES[q]}
         </td></tr>`;
       lastQD = q;
@@ -3042,6 +3056,9 @@ function renderDespachos(d) {
       <td style="color:${vary!=='—'&&vary>0?'var(--danger)':'var(--success)'}">${vary!=='—'?(vary>0?'+':'')+vary+'%':'—'}</td>
       <td style="color:${ok?'var(--success)':'var(--danger)'}">${vs>0?'+':''}${vs}%</td>
       <td><span class="badge badge-${ok?'ok':'danger'}">${ok?'🟢 EXCELENTE':'🔴 ALERTA'}</span></td>
+      <td style="min-width:240px;padding:8px 12px">
+        ${renderObsCell(obsDesp[r.mes]||"")}
+      </td>
     </tr>`;
   });
   despTblRows += `<tr style="background:rgba(0,198,255,0.04);font-weight:700;border-top:2px solid rgba(0,198,255,0.2)">
@@ -3052,11 +3069,12 @@ function renderDespachos(d) {
     <td>—</td>
     <td style="color:${pct<=META_DESP?'var(--success)':'var(--danger)'}">Meta ≤${META_DESP}%</td>
     <td><span class="badge badge-${pct<=META_DESP?'ok':'danger'}">${pct<=META_DESP?'✅ CUMPLIDA':'❌ INCUMPLIDA'}</span></td>
+    <td style="color:var(--text-dim);font-size:11px;font-style:italic">—</td>
   </tr>`;
 
   document.getElementById('tbl-desp').innerHTML = `
   <table>
-    <thead><tr><th>Período</th><th>Ventas</th><th>Errores</th><th>% Error</th><th>Variación vs mes ant.</th><th>vs Meta</th><th>Semáforo</th></tr></thead>
+    <thead><tr><th>Período</th><th>Ventas</th><th>Errores</th><th>% Error</th><th>Variación vs mes ant.</th><th>vs Meta</th><th>Semáforo</th><th>📝 Observación</th></tr></thead>
     <tbody>${despTblRows}</tbody>
   </table>`;
 
@@ -3070,7 +3088,7 @@ function renderDespachos(d) {
 function baseOpts(extra={}, pctY=false) {
   return {
     responsive:true, maintainAspectRatio:true,
-    plugins:{ legend:{ labels:{ color:'#ffffff', font:{family:CHT.font,size:12} }},
+    plugins:{ legend:{ labels:{ color:'#334155', font:{family:CHT.font,size:12} }},
               tooltip: CHT.tt },
     scales:{
       x:{ grid:{color:CHT.grid}, ticks:{color:CHT.tick, font:{family:CHT.font}} },
@@ -3276,6 +3294,17 @@ function renderDevoluciones(d) {
     }
   });
 
+  // ── OBSERVACIONES por mes ────────────────────────────────────
+  const obsDevMap = Object.assign({}, _OBS_LOCAL.devoluciones || {}, (d._obsDevoluciones || {}));
+  const obsDevRows = devFilt.map(r => {
+    const obs = obsDevMap[r.mes] || '';
+    if (!obs) return '';
+    return `<tr style="background:rgba(189,147,249,0.04)">
+      <td style="padding:6px 12px;font-size:11px;color:var(--text-dim);font-style:italic">${r.mes}</td>
+      <td colspan="${devFilt.length * 2 + 1}" style="padding:6px 12px">${renderObsCell(obs)}</td>
+    </tr>`;
+  }).filter(Boolean).join('');
+
   // ── TABLA: detalle por producto y mes ─────────────────────────
   const todosProds = [...new Set(devFilt.flatMap(r => Object.keys(r.porProducto || {})))];
   const colorPct = p => p > 4 ? 'var(--danger)' : p > 2 ? 'var(--warn)' : 'var(--success)';
@@ -3311,7 +3340,31 @@ function renderDevoluciones(d) {
     <td style="font-weight:800;color:var(--danger)">$${Number(totDev).toLocaleString('es-CO')}</td>
   </tr>`;
 
-  document.getElementById('tbl-dev').innerHTML = `
+  // Resumen de observaciones por mes (si existen)
+  const obsDevSummaryHtml = devFilt.some(r => obsDevMap[r.mes]) ? `
+    <div style="margin-bottom:16px;border:1px solid rgba(189,147,249,0.25);border-radius:10px;overflow:hidden">
+      <div style="padding:8px 14px;background:rgba(189,147,249,0.1);font-size:11px;font-weight:700;color:#bd93f9;letter-spacing:.5px">
+        📝 OBSERVACIONES POR MES
+      </div>
+      ${devFilt.map(r => {
+        const obs = obsDevMap[r.mes] || '';
+        if (!obs) return '';
+        const partes = obs.split('|').map(s=>s.trim()).filter(Boolean);
+        const chipsHtml = partes.map(p => {
+          const col = (p.includes('🔴')||p.includes('❌')||/actuar|no se cumplió|encima/i.test(p)) ? 'var(--danger)'
+                    : (p.includes('🏆')||p.includes('✅')||/mejor|conservaron|cumpl/i.test(p)) ? 'var(--success)'
+                    : (p.includes('🟠')||p.includes('📈')||/seguimiento|incremento/i.test(p)) ? 'var(--warn)'
+                    : 'var(--text-dim)';
+          return `<span style="font-size:11px;color:\${col};line-height:1.5;display:block">\${p}</span>`;
+        }).join('');
+        return `<div style="display:flex;gap:14px;padding:10px 14px;border-top:1px solid rgba(189,147,249,0.12)">
+          <div style="min-width:90px;font-size:12px;font-weight:700;color:var(--text)">\${r.mes}</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">\${chipsHtml}</div>
+        </div>`;
+      }).filter(Boolean).join('')}
+    </div>` : '';
+
+  document.getElementById('tbl-dev').innerHTML = obsDevSummaryHtml + `
   <div style="margin-bottom:12px;font-size:12px;color:var(--text-dim);padding:10px 14px;background:rgba(189,147,249,0.06);border:1px solid rgba(189,147,249,0.2);border-radius:8px">
     💡 <strong style="color:#bd93f9">Cómo leer:</strong> cada columna muestra el valor devuelto por producto en ese mes y su % sobre las ventas totales del mes. 
     🟢 &lt;0.3% normal &nbsp;|&nbsp; 🟡 0.3–0.6% vigilar &nbsp;|&nbsp; 🔴 &gt;0.6% actuar
