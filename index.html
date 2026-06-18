@@ -1818,7 +1818,12 @@ function parseDashboardData(json) {
     const anio = partes[1] ? Number(partes[1]) : Number(anioFallback || 2026);
     return `${mesPalabra} ${anio}`;
   };
+  // ── Construir índice novByMesTipoFB ──────────────────────────
+  // Fuente 1: json.novedades (array de filas crudas — versión antigua del backend)
+  // Fuente 2: json.productoNovedades (objeto {tipo: {mes|año: cant}} — versión v7 del backend)
   const novByMesTipoFB = {};
+
+  // Fuente 1: rows crudas
   (json.novedades || []).forEach(r => {
     const key  = _claveMesAnio(r['Mes'], r['Año']);
     const tipo = String(r['Tipo'] || '').trim().toLowerCase();
@@ -1826,8 +1831,24 @@ function parseDashboardData(json) {
     if (!novByMesTipoFB[key]) novByMesTipoFB[key] = {};
     novByMesTipoFB[key][tipo] = (novByMesTipoFB[key][tipo] || 0) + cant;
   });
+
+  // Fuente 2: productoNovedades — estructura { "Tipo": { "Mes|Año": cantidad } }
+  // El backend v7 manda esto en lugar de novedades[]
+  if (json.productoNovedades && typeof json.productoNovedades === 'object') {
+    Object.entries(json.productoNovedades).forEach(([tipo, mesMapa]) => {
+      const tipoLow = tipo.trim().toLowerCase();
+      if (typeof mesMapa !== 'object') return;
+      Object.entries(mesMapa).forEach(([mesAnioKey, cant]) => {
+        // clave viene como "Enero|2026" → normalizar a "Enero 2026"
+        const partes = mesAnioKey.split('|');
+        const key = _claveMesAnio(partes[0], partes[1]);
+        if (!novByMesTipoFB[key]) novByMesTipoFB[key] = {};
+        novByMesTipoFB[key][tipoLow] = (novByMesTipoFB[key][tipoLow] || 0) + Number(cant || 0);
+      });
+    });
+  }
+
   const novCantFB = (mesMes, tipo) => {
-    // mesMes puede venir como "Enero 2026", "enero 2026", etc. — se normaliza igual que el índice
     const key  = _claveMesAnio(mesMes);
     const slot = novByMesTipoFB[key] || {};
     return slot[tipo.toLowerCase()] || 0;
