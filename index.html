@@ -1676,8 +1676,18 @@ async function autoSyncObservaciones(d) {
     }
   };
 
-  // writeObservaciones no implementado en el backend — se omite silenciosamente
-  console.log('ℹ️ writeObservaciones: omitido (no implementado en Apps Script)');
+  // Guardar observaciones generadas en _OBS_LOCAL para que la UI las muestre
+  if (!_OBS_LOCAL.ventas)      _OBS_LOCAL.ventas      = {};
+  if (!_OBS_LOCAL.novedades)   _OBS_LOCAL.novedades   = {};
+  if (!_OBS_LOCAL.despachos)   _OBS_LOCAL.despachos   = {};
+  if (!_OBS_LOCAL.devoluciones)_OBS_LOCAL.devoluciones= {};
+  // Solo escribir si la celda aún está vacía (no pisar lo que el usuario editó)
+  Object.entries(obsVentas).forEach(([k,v])      => { if (!_OBS_LOCAL.ventas[k])       _OBS_LOCAL.ventas[k]       = v; });
+  Object.entries(obsNovedades).forEach(([k,v])   => { if (!_OBS_LOCAL.novedades[k])    _OBS_LOCAL.novedades[k]    = v; });
+  Object.entries(obsDespachos).forEach(([k,v])   => { if (!_OBS_LOCAL.despachos[k])    _OBS_LOCAL.despachos[k]    = v; });
+  Object.entries(obsDevoluciones).forEach(([k,v])=> { if (!_OBS_LOCAL.devoluciones[k]) _OBS_LOCAL.devoluciones[k] = v; });
+  _saveObsLocal();
+  console.log('✅ Observaciones auto-generadas guardadas en _OBS_LOCAL');
 }
 
 async function syncData() {
@@ -2348,8 +2358,12 @@ function renderResumen(d) {
     qRows[q].ventasD    += (typeof dp.ventas==='number'?dp.ventas:0);
   });
 
-  // Leer observaciones para tabla resumen
-  const obsVRes = Object.assign({}, _OBS_LOCAL.ventas || {}, (d._obsVentas || {}));
+  // Leer observaciones para tabla resumen — prioridad: manual > Sheet > auto-generada > textoAuto
+  const obsVRes   = Object.assign({}, _OBS_LOCAL.ventas      || {}, (d._obsVentas  || {}));
+  const obsDRes   = Object.assign({}, _OBS_LOCAL.despachos   || {});
+  // Construir índice textoAuto por mes (desde despachosMensual del backend)
+  const textoAutoByMes = {};
+  (d.despachos || []).forEach(r => { if (r.textoAuto) textoAutoByMes[r.mes] = r.textoAuto; });
 
   let tblRows = '';
   let lastQR = null;
@@ -2359,7 +2373,7 @@ function renderResumen(d) {
     const dpRow = dp[i]||{errores:'—',pct:'—'};
     const novOk = r.pct <= META_NOV;
     const despOk = typeof dpRow.pct==='number' ? dpRow.pct<=META_DESP : true;
-    const obsVal  = (obsVRes[r.mes] || '').replace(/"/g, '&quot;');
+    const obsVal  = (obsDRes[r.mes] || obsVRes[r.mes] || textoAutoByMes[r.mes] || '').replace(/"/g, '&quot;');
     const obsId   = `obs-res-${i}`;
 
     // Encabezado de trimestre
