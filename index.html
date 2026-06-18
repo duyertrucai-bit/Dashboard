@@ -64,6 +64,9 @@
 .quick-btn:hover { border-color: var(--accent); color: var(--accent); background: #eff6ff; }
 .quick-btn.warn:hover { border-color: var(--warn); color: var(--warn); background: #fffbeb; }
 .quick-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: #fef2f2; }
+.quick-btn.active { border-color: var(--accent); color: #fff; background: var(--accent); font-weight: 700; }
+.quick-btn.warn.active { border-color: var(--warn); color: #fff; background: var(--warn); }
+.quick-btn.danger.active { border-color: var(--danger); color: #fff; background: var(--danger); }
 
 /* Filter active state on content */
 .view { position: relative; }
@@ -407,14 +410,14 @@ tbody td { padding: 11px 12px; }
 
   <div class="filter-section">
     <span class="filter-tag">⚡ Acceso rápido</span>
-    <button class="quick-btn" onclick="showTab('resumen'); setGlobalFilter('all')">📊 Resumen global</button>
-    <button class="quick-btn warn" onclick="showTabDirect('novedades')">🔄 Ver novedades</button>
-    <button class="quick-btn warn" onclick="showTabDirect('cambios')">📦 Ver cambios</button>
-    <button class="quick-btn danger" onclick="showTabDirect('despachos')">🚚 Ver despachos</button>
-    <button class="quick-btn" onclick="showTabDirect('devoluciones')" style="border-color:#bd93f9;color:#bd93f9">💰 Devoluciones</button>
-    <button class="quick-btn" onclick="showTabDirect('editar')" style="border-color:#ffb86c;color:#ffb86c">🖊️ Editar datos</button>
-    <button class="quick-btn" onclick="showTabDirect('papelera')" style="border-color:#ff5555;color:#ff5555">🗑️ Papelera</button>
-    <button class="quick-btn" onclick="showTabDirect('ingresar')" style="border-color:var(--success);color:var(--success)">✏️ Ingresar datos</button>
+    <button class="quick-btn" data-qtab="resumen" onclick="showTab('resumen'); setGlobalFilter('all')">📊 Resumen global</button>
+    <button class="quick-btn warn" data-qtab="novedades" onclick="showTabDirect('novedades')">🔄 Ver novedades</button>
+    <button class="quick-btn warn" data-qtab="cambios" onclick="showTabDirect('cambios')">📦 Ver cambios</button>
+    <button class="quick-btn danger" data-qtab="despachos" onclick="showTabDirect('despachos')">🚚 Ver despachos</button>
+    <button class="quick-btn" data-qtab="devoluciones" onclick="showTabDirect('devoluciones')" style="border-color:#bd93f9;color:#bd93f9">💰 Devoluciones</button>
+    <button class="quick-btn" data-qtab="editar" onclick="showTabDirect('editar')" style="border-color:#ffb86c;color:#ffb86c">🖊️ Editar datos</button>
+    <button class="quick-btn" data-qtab="papelera" onclick="showTabDirect('papelera')" style="border-color:#ff5555;color:#ff5555">🗑️ Papelera</button>
+    <button class="quick-btn" data-qtab="ingresar" onclick="showTabDirect('ingresar')" style="border-color:var(--success);color:var(--success)">✏️ Ingresar datos</button>
   </div>
 
   <div id="active-filter-chip" class="hidden">
@@ -557,6 +560,11 @@ tbody td { padding: 11px 12px; }
 
   <!-- ─ DESPACHOS ───────────────────────────────────────── -->
   <div id="view-despachos" class="view">
+    <!-- DEBUG PANEL — se elimina cuando funcione -->
+    <div id="debug-desp-panel" style="background:#1e1e2e;border:2px solid #ff79c6;border-radius:10px;padding:16px;margin-bottom:18px;font-family:monospace;font-size:12px;color:#cdd6f4">
+      <div style="color:#ff79c6;font-weight:700;margin-bottom:8px">🔍 DEBUG — estructura JSON recibida del backend</div>
+      <div id="debug-desp-content" style="white-space:pre-wrap;color:#a6e3a1">Sincroniza datos (↻) para ver el debug...</div>
+    </div>
     <div class="kpi-grid" id="kpi-desp"></div>
     <div class="chart-grid-2">
       <div class="card">
@@ -1463,6 +1471,11 @@ const gradA = (ctx, c1='#00c6ff', c2='transparent') => {
 };
 
 // ── TABS ──────────────────────────────────────────────────────
+function _syncQuickBtns(name) {
+  document.querySelectorAll('.quick-btn[data-qtab]').forEach(b => {
+    b.classList.toggle('active', b.dataset.qtab === name);
+  });
+}
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (name === 'papelera') renderPapelera();
@@ -1473,6 +1486,7 @@ function showTab(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('view-' + name).classList.add('active');
+  _syncQuickBtns(name);
 }
 
 function showTabDirect(name) {
@@ -1482,6 +1496,7 @@ function showTabDirect(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   const el = document.getElementById('view-' + name);
   if (el) el.classList.add('active');
+  _syncQuickBtns(name);
 }
 
 // ── SYNC ──────────────────────────────────────────────────────
@@ -1724,6 +1739,31 @@ async function syncData() {
 // Code_v7.gs devuelve % y estados listos; NO recalcular en JS.
 // Si _fromSheets === true, los porcentajes ya están en escala % (no fracción).
 function parseDashboardData(json) {
+  // ── DEBUG TEMPORAL — abrir Consola del navegador (F12 > Console) ──
+  console.group('DEBUG parseDashboardData');
+  console.log('Keys JSON raiz:', Object.keys(json));
+  console.log('novedades[0]:', (json.novedades||[])[0]);
+  console.log('despachosMensual[0]:', (json.despachosMensual||[])[0]);
+  console.log('despachos[0]:', (json.despachos||[])[0]);
+  console.groupEnd();
+  // ── Panel debug visible en UI ──
+  setTimeout(() => {
+    const dbPanel = document.getElementById('debug-desp-content');
+    if (dbPanel) {
+      const info = {
+        'Keys raíz': Object.keys(json),
+        'novedades length': (json.novedades||[]).length,
+        'novedades[0]': (json.novedades||[])[0] || 'VACÍO',
+        'novedades[1]': (json.novedades||[])[1] || '-',
+        'despachosMensual length': (json.despachosMensual||[]).length,
+        'despachosMensual[0]': (json.despachosMensual||[])[0] || 'VACÍO',
+        'despachos length': (json.despachos||[]).length,
+        'despachos[0]': (json.despachos||[])[0] || 'VACÍO',
+      };
+      dbPanel.textContent = JSON.stringify(info, null, 2);
+    }
+  }, 500);
+  // ── FIN DEBUG ──
   const ORDEN = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -1767,26 +1807,33 @@ function parseDashboardData(json) {
   // ── Índice Novedades por mes+tipo ──────────────────────────────
   // Normaliza mayúsculas del mes para tolerar "enero" y "Enero" indistintamente
   const _capMes = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  // Clave canónica: toma solo la primera palabra (nombre del mes) + año,
+  // así "Enero 2026", "enero 2026" o "ENERO  2026" todas mapean igual.
+  const _claveMesAnio = (mesStr, anioFallback) => {
+    const partes = String(mesStr || '').trim().split(/\s+/);
+    const mesPalabra = _capMes(partes[0] || '');
+    const anio = partes[1] ? Number(partes[1]) : Number(anioFallback || 2026);
+    return `${mesPalabra} ${anio}`;
+  };
   const novByMesTipoFB = {};
   (json.novedades || []).forEach(r => {
-    const mes  = _capMes(String(r['Mes']  || '').trim());
-    const anio = Number(r['Año']  || 2026);
+    const key  = _claveMesAnio(r['Mes'], r['Año']);
     const tipo = String(r['Tipo'] || '').trim().toLowerCase();
     const cant = Number(r['Cantidad'] || 0);
-    const key  = `${mes} ${anio}`;
     if (!novByMesTipoFB[key]) novByMesTipoFB[key] = {};
     novByMesTipoFB[key][tipo] = (novByMesTipoFB[key][tipo] || 0) + cant;
   });
   const novCantFB = (mesMes, tipo) => {
-    // mesMes puede venir como "Enero 2026" — ya normalizado
-    const slot = novByMesTipoFB[mesMes] || {};
+    // mesMes puede venir como "Enero 2026", "enero 2026", etc. — se normaliza igual que el índice
+    const key  = _claveMesAnio(mesMes);
+    const slot = novByMesTipoFB[key] || {};
     return slot[tipo.toLowerCase()] || 0;
   };
 
   // ── despachosMensual → despachos ────────────────────────────
   // Si un mes existe en Novedades pero NO en Despachos, lo agregamos
   // para que aparezca en las tortas de error de despacho.
-  const mesesEnDespachos = new Set((json.despachosMensual||[]).filter(r=>_mesValido(r.mes)).map(r => r.mes));
+  const mesesEnDespachos = new Set((json.despachosMensual||[]).filter(r=>_mesValido(r.mes)).map(r => _claveMesAnio(r.mes)));
   // Normalizar pct de despachos también
   if (json.despachosMensual) {
     json.despachosMensual = json.despachosMensual
@@ -1819,7 +1866,7 @@ function parseDashboardData(json) {
       productoIncorrecto: novCantFB(r.mes, 'me llegó un producto incorrecto'),
       faltoProducto:      novCantFB(r.mes, 'pedido incompleto'),
       sobroProducto:      novCantFB(r.mes, 'producto sobrante'),
-      productoIncompleto: 0,
+      productoIncompleto: novCantFB(r.mes, 'me llegó un producto incompleto'), // columna opcional en Sheet
       pedidoIncompleto:   novCantFB(r.mes, 'pedido incompleto'),
       sobrante:           novCantFB(r.mes, 'producto sobrante'),
     })),
@@ -1828,7 +1875,7 @@ function parseDashboardData(json) {
       productoIncorrecto: novCantFB(r.mes, 'me llegó un producto incorrecto'),
       faltoProducto:      novCantFB(r.mes, 'pedido incompleto'),
       sobroProducto:      novCantFB(r.mes, 'producto sobrante'),
-      productoIncompleto: 0,
+      productoIncompleto: novCantFB(r.mes, 'me llegó un producto incompleto'),
       pedidoIncompleto:   novCantFB(r.mes, 'pedido incompleto'),
       sobrante:           novCantFB(r.mes, 'producto sobrante'),
     })),
@@ -2075,7 +2122,9 @@ function parseSheetData(json) {
   });
 
   const novCant = (mesMes, tipo) => {
-    const slot = novByMesTipo[mesMes] || {};
+    // Normaliza igual que al construir el índice (tolera "enero 2026" vs "Enero 2026")
+    const norm = String(mesMes || '').trim().replace(/^(\S+)/, m => _cap(m));
+    const slot = novByMesTipo[norm] || {};
     return slot[tipo.toLowerCase()] || 0;
   };
 
@@ -2168,6 +2217,7 @@ function renderAll(d) {
   renderDevoluciones(d);
   renderTortasMotivo(d);
   renderTortasDespacho(d);
+  renderTortasIncompleto(d);
 }
 
 // ── RESUMEN ───────────────────────────────────────────────────
@@ -3616,8 +3666,7 @@ function renderTortasIncompleto(d) {
   const conDatos = dp.filter(r => (r.productoIncompleto||0)+(r.pedidoIncompleto||0)+(r.sobrante||0) > 0);
 
   if (!conDatos.length) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px">Sin datos de pedidos incompletos/sobrantes para el período seleccionado.<br><br>' +
-      '<span style="font-size:12px;opacity:.7">Agrega columnas <code>Producto Incompleto</code>, <code>Pedido Incompleto</code> y <code>Sobrante</code> en la hoja 🚚 Despachos del Sheet.</span></div>';
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px">Sin datos de pedidos incompletos/sobrantes para el período seleccionado.</div>';
     return;
   }
 
