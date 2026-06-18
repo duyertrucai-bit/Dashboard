@@ -1754,11 +1754,14 @@ function parseDashboardData(json) {
         'Keys raíz': Object.keys(json),
         'novedades length': (json.novedades||[]).length,
         'novedades[0]': (json.novedades||[])[0] || 'VACÍO',
-        'novedades[1]': (json.novedades||[])[1] || '-',
+        'productoNovedades (type)': typeof json.productoNovedades,
+        'productoNovedades (primeros 2)': Array.isArray(json.productoNovedades)
+          ? (json.productoNovedades||[]).slice(0,2)
+          : json.productoNovedades,
         'despachosMensual length': (json.despachosMensual||[]).length,
-        'despachosMensual[0]': (json.despachosMensual||[])[0] || 'VACÍO',
-        'despachos length': (json.despachos||[]).length,
-        'despachos[0]': (json.despachos||[])[0] || 'VACÍO',
+        'despachosMensual[0] COMPLETO': (json.despachosMensual||[])[0] || 'VACÍO',
+        'despachosMensual[1]': (json.despachosMensual||[])[1] || 'VACÍO',
+        'mesesKeys': json.mesesKeys,
       };
       dbPanel.textContent = JSON.stringify(info, null, 2);
     }
