@@ -1262,14 +1262,12 @@ const FALLBACK = {
     { mes:'Abril 2026',   motivo:'Pedido incompleto',                   cantidad:3  },
   ],
   devoluciones: [
-    { mes:'Enero 2026',   ventas:8500000, devTotal:320000, pct:3.76,
-      porProducto:{ '5mm':80000, '7mm Clásicas':60000, '7mm Pixel':120000, 'Cinturón 10mm':60000, 'Powerlifting':0 } },
-    { mes:'Febrero 2026', ventas:9200000, devTotal:180000, pct:1.96,
-      porProducto:{ '5mm':50000, '7mm Clásicas':30000, '7mm Pixel':70000, 'Cinturón 10mm':30000, 'Powerlifting':0 } },
-    { mes:'Marzo 2026',   ventas:12500000, devTotal:290000, pct:2.32,
-      porProducto:{ '5mm':70000, '7mm Clásicas':40000, '7mm Pixel':110000, 'Cinturón 10mm':0, 'Powerlifting':70000 } },
-    { mes:'Abril 2026',   ventas:9800000, devTotal:410000, pct:4.18,
-      porProducto:{ '5mm':90000, '7mm Clásicas':50000, '7mm Pixel':80000, 'Cinturón 10mm':90000, 'Cinturon crossfit':100000 } },
+    // Datos exactos de la hoja "Devoluciones" del Excel (VentasMes / ValorDevuelto)
+    { mes:'Enero 2026',   ventas:251874990, devTotal:1570150, pct:0.62, porProducto:{} },
+    { mes:'Febrero 2026', ventas:291919699, devTotal:3808512, pct:1.30, porProducto:{} },
+    { mes:'Marzo 2026',   ventas:407808078, devTotal:3113613, pct:0.76, porProducto:{} },
+    { mes:'Abril 2026',   ventas:259243702, devTotal:1833634, pct:0.71, porProducto:{} },
+    { mes:'Mayo 2026',    ventas:415516313, devTotal:1629798, pct:0.39, porProducto:{} },
   ],
 };
 
@@ -1841,7 +1839,14 @@ function parseDashboardData(json) {
   if (json.despachosMensual) {
     json.despachosMensual = json.despachosMensual
       .filter(r => _mesValido(r.mes))
-      .map(r => ({ ...r, pct: _normPct(r.pct) }));
+      .map(r => {
+        // Siempre recalcular pct desde errores/ventas para evitar inconsistencias
+        // del Sheet (ej. si viene como fracción 0.0103 o como entero 1.03 o 17)
+        const ventas  = Number(r.ventas  || 0);
+        const errores = Number(r.errores || 0);
+        const pct = ventas > 0 ? +((errores / ventas) * 100).toFixed(2) : _normPct(r.pct);
+        return { ...r, pct };
+      });
   }
   const mesesExtraDeNovedades = [];
   Object.keys(novByMesTipoFB).forEach(key => {
@@ -2768,7 +2773,7 @@ function buildCambiosChart(filteredKeys) {
     options:{
       responsive:true, maintainAspectRatio:true,
       plugins:{
-        legend:{ labels:{ color:'#ffffff', font:{family:CHT.font,size:12} }},
+        legend:{ labels:{ color:'#334155', font:{family:CHT.font,size:12} }},
         tooltip:{ ...CHT.tt, callbacks:{
           title: items => '📦 ' + items[0].label,
           label: ctx => {
@@ -3226,7 +3231,7 @@ function renderDevoluciones(d) {
     options: {
       responsive:true, maintainAspectRatio:true,
       plugins: {
-        legend: { position:'right', labels:{ color:'#ffffff', font:{family:CHT.font, size:11}, padding:12 }},
+        legend: { position:'right', labels:{ color:'#334155', font:{family:CHT.font, size:11}, padding:12 }},
         tooltip: { ...CHT.tt, callbacks: {
           title: items => '📦 ' + items[0].label,
           label: ctx => {
@@ -3554,7 +3559,7 @@ function renderTortasMotivo(d) {
             legend: {
               position: 'right',
               labels: {
-                color: '#ffffff',
+                color: '#334155',
                 font: { family: CHT.font, size: 10 },
                 padding: 8,
                 boxWidth: 12,
@@ -3565,8 +3570,8 @@ function renderTortasMotivo(d) {
                     fillStyle: ds.backgroundColor[i],
                     strokeStyle: ds.borderColor,
                     lineWidth: ds.borderWidth,
-                    fontColor: '#ffffff',
-                    color: '#ffffff',
+                    fontColor: '#334155',
+                    color: '#334155',
                     index: i,
                   }));
                 }
@@ -3669,7 +3674,7 @@ function renderTortasDespacho(d) {
           legend: {
             position: 'right',
             labels: {
-              color: '#ffffff',
+              color: '#334155',
               font: { family: CHT.font, size: 10 },
               padding: 8,
               boxWidth: 12,
@@ -3680,8 +3685,8 @@ function renderTortasDespacho(d) {
                   fillStyle: ds.backgroundColor[i],
                   strokeStyle: ds.borderColor,
                   lineWidth: ds.borderWidth,
-                  fontColor: '#ffffff',
-                  color: '#ffffff',
+                  fontColor: '#334155',
+                  color: '#334155',
                   index: i,
                 }));
               }
@@ -3791,7 +3796,7 @@ function renderTortasIncompleto(d) {
           legend: {
             position: 'right',
             labels: {
-              color: '#ffffff',
+              color: '#334155',
               font: { family: CHT.font, size: 10 },
               padding: 8,
               boxWidth: 12,
@@ -3802,8 +3807,8 @@ function renderTortasIncompleto(d) {
                   fillStyle: ds.backgroundColor[i],
                   strokeStyle: ds.borderColor,
                   lineWidth: ds.borderWidth,
-                  fontColor: '#ffffff',
-                  color: '#ffffff',
+                  fontColor: '#334155',
+                  color: '#334155',
                   index: i,
                 }));
               }
