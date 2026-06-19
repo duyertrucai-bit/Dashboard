@@ -1197,6 +1197,7 @@ function gasRequest(params) {
     };
     const qs = new URLSearchParams(params);
     qs.set('callback', cbName);
+    qs.set('t', Date.now()); // ← rompe caché de Google — SIEMPRE datos frescos
     const script = document.createElement('script');
     script.src = SCRIPT_URL + '?' + qs.toString();
     script.onerror = () => {
@@ -1718,6 +1719,10 @@ async function syncData() {
 
     document.getElementById('last-update').textContent =
       '✅ ' + new Date().toLocaleTimeString('es-CO');
+    // Ocultar barra de error si estaba visible
+    const bar = document.getElementById('alerts-bar');
+    bar.classList.remove('show');
+    bar.style.background = '';
     fetchAlerts();
 
     // Cargar notas si la vista está activa
@@ -1731,7 +1736,15 @@ async function syncData() {
   } catch(e) {
     console.warn('Sheets no disponible, usando datos de muestra.', e.message);
     DATA = FALLBACK;
-    document.getElementById('last-update').textContent = '⚠️ Sin conexión';
+    document.getElementById('last-update').textContent = '⚠️ Sin conexión — mostrando datos de ejemplo';
+    // Mostrar banner de advertencia visible
+    const bar = document.getElementById('alerts-bar');
+    bar.innerHTML = `<span style="font-size:18px">⚠️</span>
+      <strong style="color:var(--danger)">Sin conexión a Google Sheets</strong>
+      <span style="color:#7f1d1d">— Los datos mostrados son de ejemplo (FALLBACK). Error: ${e.message}</span>
+      <button onclick="syncData()" style="margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:5px 14px;cursor:pointer;font-weight:600">🔄 Reintentar</button>`;
+    bar.classList.add('show');
+    bar.style.background = '#fef2f2';
   }
   btn.classList.remove('loading');
   renderAll(DATA);
