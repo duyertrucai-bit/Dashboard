@@ -630,7 +630,7 @@ tbody td { padding: 11px 12px; }
 
     <!-- Gráfico ventas vs devoluciones por mes -->
     <div class="chart-grid-2">
-      <div class="card" style="grid-column:1/-1">
+      <div class="card card-full">
         <div class="card-stripe" style="background:linear-gradient(90deg,#bd93f9,var(--danger),transparent)"></div>
         <div class="card-header">
           <div class="card-title">Ventas vs Devoluciones por Mes ($)</div>
@@ -639,18 +639,8 @@ tbody td { padding: 11px 12px; }
         <canvas id="ch-dev-mes" style="max-height:300px"></canvas>
       </div>
 
-      <!-- Gráfico devoluciones por producto -->
-      <div class="card">
-        <div class="card-stripe" style="background:linear-gradient(90deg,var(--danger),transparent)"></div>
-        <div class="card-header">
-          <div class="card-title">Devoluciones por Producto ($)</div>
-          <div class="card-sub">Acumulado del período seleccionado</div>
-        </div>
-        <canvas id="ch-dev-prod" style="max-height:260px"></canvas>
-      </div>
-
       <!-- Gráfico % devolución sobre ventas -->
-      <div class="card">
+      <div class="card card-full">
         <div class="card-stripe" style="background:linear-gradient(90deg,var(--warn),transparent)"></div>
         <div class="card-header">
           <div class="card-title">% Devolución sobre Ventas</div>
@@ -680,14 +670,14 @@ tbody td { padding: 11px 12px; }
       </div>
     </div>
 
-    <!-- Tabla detalle por producto y mes -->
-    <div class="card card-full">
+    <!-- Observaciones por mes -->
+    <div class="card card-full" id="card-dev-obs" style="display:none">
       <div class="card-stripe" style="background:linear-gradient(90deg,#bd93f9,transparent)"></div>
       <div class="card-header">
-        <div class="card-title">Detalle por Producto y Mes</div>
-        <div class="card-sub">Valor devuelto ($) y % sobre ventas del mes</div>
+        <div class="card-title">📝 Observaciones por Mes</div>
+        <div class="card-sub">Análisis automático generado desde la hoja de Devoluciones</div>
       </div>
-      <div class="tbl-wrap" id="tbl-dev"></div>
+      <div class="tbl-wrap" id="tbl-dev-obs"></div>
     </div>
 
     <!-- Formulario ingreso rápido -->
@@ -3246,43 +3236,6 @@ function renderDevoluciones(d) {
     }
   });
 
-  // ── GRÁFICO 2: Devoluciones por producto (acumulado) ──────────
-  const prodMap = {};
-  devFilt.forEach(r => {
-    Object.entries(r.porProducto || {}).forEach(([prod, val]) => {
-      prodMap[prod] = (prodMap[prod] || 0) + val;
-    });
-  });
-  const prodLabels = Object.keys(prodMap);
-  const prodVals   = Object.values(prodMap);
-  const prodColors = ['rgba(255,61,90,0.82)','rgba(255,176,32,0.82)','rgba(0,198,255,0.82)',
-                      'rgba(189,147,249,0.82)','rgba(0,229,160,0.82)','rgba(255,121,198,0.82)'];
-  mkChart('ch-dev-prod', {
-    type: 'doughnut',
-    data: { labels: prodLabels, datasets:[{
-      data: prodVals,
-      backgroundColor: prodColors.slice(0, prodLabels.length),
-      borderWidth: 2, borderColor: 'var(--bg)',
-    }]},
-    options: {
-      responsive:true, maintainAspectRatio:true,
-      plugins: {
-        legend: { position:'right', labels:{ color:'#334155', font:{family:CHT.font, size:11}, padding:12 }},
-        tooltip: { ...CHT.tt, callbacks: {
-          title: items => '📦 ' + items[0].label,
-          label: ctx => {
-            const total = prodVals.reduce((a,b)=>a+b,0);
-            const pct   = total > 0 ? ((ctx.parsed/total)*100).toFixed(1) : 0;
-            return [
-              ` ↩️  Devuelto: ${fmtPeso(ctx.parsed)}`,
-              ` 📊 % del total devuelto: ${pct}%`,
-            ];
-          }
-        }}
-      }
-    }
-  });
-
   // ── GRÁFICO 3: % devolución por mes con línea de meta ─────────
   mkChart('ch-dev-pct', {
     type: 'line',
@@ -3415,48 +3368,8 @@ function renderDevoluciones(d) {
     </tr>`;
   }).filter(Boolean).join('');
 
-  // ── TABLA: detalle por producto y mes ─────────────────────────
-  const todosProds = [...new Set(devFilt.flatMap(r => Object.keys(r.porProducto || {})))];
-  const colorPct = p => p > 4 ? 'var(--danger)' : p > 2 ? 'var(--warn)' : 'var(--success)';
-
-  const thead = `<tr>
-    <th style="min-width:160px">Producto</th>
-    ${devFilt.map(r=>`<th>$ ${r.mes.replace(' 2026','')}</th><th>% mes</th>`).join('')}
-    <th>Total devuelto</th>
-  </tr>`;
-
-  const tbody = todosProds.map(prod => {
-    const celdas = devFilt.map(r => {
-      const val = (r.porProducto || {})[prod] || 0;
-      const pct = r.ventas > 0 ? +((val/r.ventas)*100).toFixed(2) : 0;
-      return `<td>${val > 0 ? '$'+Number(val).toLocaleString('es-CO') : '—'}</td>
-              <td style="color:${colorPct(pct)}">${pct > 0 ? pct+'%' : '—'}</td>`;
-    }).join('');
-    const total = devFilt.reduce((s,r) => s + ((r.porProducto||{})[prod]||0), 0);
-    return `<tr>
-      <td><strong>${prod}</strong></td>
-      ${celdas}
-      <td style="color:var(--accent);font-weight:800">$${Number(total).toLocaleString('es-CO')}</td>
-    </tr>`;
-  }).join('');
-
-  // Fila de totales
-  const totalRow = `<tr style="background:rgba(0,198,255,0.06)">
-    <td style="font-weight:800;color:var(--accent)">TOTAL MES</td>
-    ${devFilt.map(r => `
-      <td style="font-weight:800;color:var(--success)">$${Number(r.devTotal).toLocaleString('es-CO')}</td>
-      <td style="font-weight:800;color:${colorPct(r.pct)}">${r.pct}%</td>
-    `).join('')}
-    <td style="font-weight:800;color:var(--danger)">$${Number(totDev).toLocaleString('es-CO')}</td>
-  </tr>`;
-
-  // Resumen de observaciones por mes (si existen)
-  const obsDevSummaryHtml = devFilt.some(r => obsDevMap[r.mes]) ? `
-    <div style="margin-bottom:16px;border:1px solid rgba(189,147,249,0.25);border-radius:10px;overflow:hidden">
-      <div style="padding:8px 14px;background:rgba(189,147,249,0.1);font-size:11px;font-weight:700;color:#bd93f9;letter-spacing:.5px">
-        📝 OBSERVACIONES POR MES
-      </div>
-      ${devFilt.map(r => {
+  // ── Observaciones por mes (si existen) ────────────────────────
+  const obsDevSummaryHtml = devFilt.some(r => obsDevMap[r.mes]) ? devFilt.map(r => {
         const obs = obsDevMap[r.mes] || '';
         if (!obs) return '';
         const partes = obs.split('|').map(s=>s.trim()).filter(Boolean);
@@ -3465,24 +3378,21 @@ function renderDevoluciones(d) {
                     : (p.includes('🏆')||p.includes('✅')||/mejor|conservaron|cumpl/i.test(p)) ? 'var(--success)'
                     : (p.includes('🟠')||p.includes('📈')||/seguimiento|incremento/i.test(p)) ? 'var(--warn)'
                     : 'var(--text-dim)';
-          return `<span style="font-size:11px;color:\${col};line-height:1.5;display:block">\${p}</span>`;
+          return `<span style="font-size:11px;color:${col};line-height:1.5;display:block">${p}</span>`;
         }).join('');
         return `<div style="display:flex;gap:14px;padding:10px 14px;border-top:1px solid rgba(189,147,249,0.12)">
-          <div style="min-width:90px;font-size:12px;font-weight:700;color:var(--text)">\${r.mes}</div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:2px">\${chipsHtml}</div>
+          <div style="min-width:90px;font-size:12px;font-weight:700;color:var(--text)">${r.mes}</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">${chipsHtml}</div>
         </div>`;
-      }).filter(Boolean).join('')}
-    </div>` : '';
+      }).filter(Boolean).join('') : '';
 
-  document.getElementById('tbl-dev').innerHTML = obsDevSummaryHtml + `
-  <div style="margin-bottom:12px;font-size:12px;color:var(--text-dim);padding:10px 14px;background:rgba(189,147,249,0.06);border:1px solid rgba(189,147,249,0.2);border-radius:8px">
-    💡 <strong style="color:#bd93f9">Cómo leer:</strong> cada columna muestra el valor devuelto por producto en ese mes y su % sobre las ventas totales del mes. 
-    🟢 &lt;0.3% normal &nbsp;|&nbsp; 🟡 0.3–0.6% vigilar &nbsp;|&nbsp; 🔴 &gt;0.6% actuar
-  </div>
-  <table>
-    <thead>${thead}</thead>
-    <tbody>${tbody}${totalRow}</tbody>
-  </table>`;
+  const cardObs = document.getElementById('card-dev-obs');
+  if (obsDevSummaryHtml) {
+    cardObs.style.display = '';
+    document.getElementById('tbl-dev-obs').innerHTML = obsDevSummaryHtml;
+  } else {
+    cardObs.style.display = 'none';
+  }
 }
 
 
