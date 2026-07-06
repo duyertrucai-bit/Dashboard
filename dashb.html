@@ -36,6 +36,16 @@
 .qpill.q3 { }
 .qpill.q4 { }
 
+/* Selector de mes */
+#gf-mes-select {
+  padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: #f8fafc; color: var(--text-dim);
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  font-family: var(--sans); transition: all .15s; letter-spacing: .2px;
+}
+#gf-mes-select:hover { border-color: var(--accent); color: var(--accent); background: #eff6ff; }
+#gf-mes-select:focus { outline: none; border-color: var(--accent); }
+
 /* Active filter chip */
 #active-filter-chip {
   margin-left: auto;
@@ -404,6 +414,27 @@ tbody td { padding: 11px 12px; }
     <button class="qpill q2"    id="gf-q2"   onclick="setGlobalFilter('q2')">Q2 Abr–Jun</button>
     <button class="qpill q3"    id="gf-q3"   onclick="setGlobalFilter('q3')">Q3 Jul–Sep</button>
     <button class="qpill q4"    id="gf-q4"   onclick="setGlobalFilter('q4')">Q4 Oct–Dic</button>
+  </div>
+
+  <div class="filter-divider"></div>
+
+  <div class="filter-section">
+    <span class="filter-tag">🗓️ Mes</span>
+    <select id="gf-mes-select" onchange="setMonthFilter(this.value)">
+      <option value="">Todos los meses</option>
+      <option value="Enero">Enero</option>
+      <option value="Febrero">Febrero</option>
+      <option value="Marzo">Marzo</option>
+      <option value="Abril">Abril</option>
+      <option value="Mayo">Mayo</option>
+      <option value="Junio">Junio</option>
+      <option value="Julio">Julio</option>
+      <option value="Agosto">Agosto</option>
+      <option value="Septiembre">Septiembre</option>
+      <option value="Octubre">Octubre</option>
+      <option value="Noviembre">Noviembre</option>
+      <option value="Diciembre">Diciembre</option>
+    </select>
   </div>
 
   <div class="filter-divider"></div>
@@ -1299,8 +1330,8 @@ let cambiosMes = 'todos';
 let cambiosMet = 'pct';
 const charts = {};
 
-// ── FILTRO GLOBAL POR TRIMESTRE ───────────────────────────────
-let GLOBAL_FILTER = 'all'; // 'all' | 'q1' | 'q2' | 'q3' | 'q4'
+// ── FILTRO GLOBAL POR TRIMESTRE O MES ──────────────────────────
+let GLOBAL_FILTER = 'all'; // 'all' | 'q1' | 'q2' | 'q3' | 'q4' | 'Enero'..'Diciembre'
 
 const Q_MESES = {
   q1: ['Enero','Febrero','Marzo'],
@@ -1309,9 +1340,22 @@ const Q_MESES = {
   q4: ['Octubre','Noviembre','Diciembre'],
 };
 
+const MESES_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Etiqueta corta a mostrar en KPIs/tarjetas según el filtro activo
+function periodoLabelCorto() {
+  if (GLOBAL_FILTER === 'all') return 'Total';
+  if (MESES_FULL.includes(GLOBAL_FILTER)) return GLOBAL_FILTER;
+  return GLOBAL_FILTER.toUpperCase();
+}
+
 // Filtra un array de objetos {mes, ...} (donde mes puede ser "Enero" o "Enero 2026")
 function filtrarPorQ(arr, mesField='mes') {
   if (GLOBAL_FILTER === 'all') return arr;
+  if (MESES_FULL.includes(GLOBAL_FILTER)) {
+    return arr.filter(r => String(r[mesField] || '').split(' ')[0] === GLOBAL_FILTER);
+  }
   const mesesQ = Q_MESES[GLOBAL_FILTER] || [];
   return arr.filter(r => {
     const nombre = String(r[mesField] || '').split(' ')[0];
@@ -1325,10 +1369,15 @@ function getFilteredKeys(filtroMes) {
   const srcData = (DATA.cambios && DATA.cambios.length) ? DATA : FALLBACK;
   const allKeys = DATA._mesesKeys || srcData._mesesKeys || ['Enero|2026','Febrero|2026','Marzo|2026'];
 
-  // 1. Filtro global de trimestre
-  let keys = GLOBAL_FILTER === 'all'
-    ? allKeys
-    : allKeys.filter(k => (Q_MESES[GLOBAL_FILTER]||[]).includes(k.split('|')[0]));
+  // 1. Filtro global de trimestre o mes
+  let keys;
+  if (GLOBAL_FILTER === 'all') {
+    keys = allKeys;
+  } else if (MESES_FULL.includes(GLOBAL_FILTER)) {
+    keys = allKeys.filter(k => k.split('|')[0] === GLOBAL_FILTER);
+  } else {
+    keys = allKeys.filter(k => (Q_MESES[GLOBAL_FILTER]||[]).includes(k.split('|')[0]));
+  }
 
   // 2. Filtro local de mes (pill dentro de la vista Cambios)
   if (filtroMes && filtroMes !== 'todos') {
@@ -1374,6 +1423,9 @@ function setGlobalFilter(q) {
     const el = document.getElementById('gf-'+id);
     if (el) el.classList.toggle('active', id===q);
   });
+  // Resetear el selector de mes individual
+  const mesSelect = document.getElementById('gf-mes-select');
+  if (mesSelect) mesSelect.value = '';
   // Update chip
   const chip = document.getElementById('active-filter-chip');
   const txt  = document.getElementById('active-filter-text');
@@ -1388,6 +1440,33 @@ function setGlobalFilter(q) {
     if (txt) txt.textContent = 'Filtrando: ' + labels[q];
     if (lbl) { lbl.classList.add('show'); if(ptxt) ptxt.textContent = labels[q]; }
   }
+  renderAll(DATA);
+}
+
+// ── FILTRO POR MES INDIVIDUAL (selector "🗓️ Mes") ──────────────
+function setMonthFilter(mes) {
+  if (!mes) { setGlobalFilter('all'); return; }
+  GLOBAL_FILTER = mes; // ej. 'Enero'
+  cambiosMes = 'todos';
+  document.querySelectorAll('[id^="fp-"]').forEach(el => el.classList.remove('active'));
+  const todosBtn = document.getElementById('fp-todos');
+  if (todosBtn) todosBtn.classList.add('active');
+  // Desactivar los pills de trimestre (ya no aplica ninguno)
+  ['all','q1','q2','q3','q4'].forEach(id => {
+    const el = document.getElementById('gf-'+id);
+    if (el) el.classList.remove('active');
+  });
+  // Sincronizar el propio selector de mes
+  const mesSelect = document.getElementById('gf-mes-select');
+  if (mesSelect) mesSelect.value = mes;
+  // Update chip y etiqueta de período
+  const chip = document.getElementById('active-filter-chip');
+  const txt  = document.getElementById('active-filter-text');
+  const lbl  = document.getElementById('filter-period-label');
+  const ptxt = document.getElementById('filter-period-text');
+  chip.classList.remove('hidden');
+  if (txt) txt.textContent = 'Filtrando: ' + mes;
+  if (lbl) { lbl.classList.add('show'); if (ptxt) ptxt.textContent = mes; }
   renderAll(DATA);
 }
 
@@ -2288,7 +2367,7 @@ function renderResumen(d) {
   const pctD = totVD ? ((totE/totVD)*100).toFixed(2) : 0;
   const best = vn.length ? [...vn].sort((a,b)=>a.pct-b.pct)[0] : null;
 
-  const periodoLabel = GLOBAL_FILTER==='all' ? 'Total' : GLOBAL_FILTER.toUpperCase();
+  const periodoLabel = periodoLabelCorto();
 
   document.getElementById('kpi-resumen').innerHTML = [
     kpiCard('🛒','Ventas '+periodoLabel, totV.toLocaleString('es-CO'), 'Unidades vendidas', 'var(--accent)'),
@@ -2507,7 +2586,7 @@ function renderNovedades(d) {
   const totN = vn.reduce((s,r)=>s+r.novedades,0);
   const pct  = totV ? ((totN/totV)*100).toFixed(2) : 0;
   const best = vn.length ? [...vn].sort((a,b)=>a.pct-b.pct)[0] : null;
-  const periodoLabel = GLOBAL_FILTER==='all' ? 'Total' : GLOBAL_FILTER.toUpperCase();
+  const periodoLabel = periodoLabelCorto();
 
   document.getElementById('kpi-nov').innerHTML = [
     kpiCard('🛒','Ventas '+periodoLabel, totV.toLocaleString('es-CO'), '', 'var(--accent)'),
@@ -2633,7 +2712,7 @@ function renderCambios() {
   // Filtrar mesesKeys por Q global + mes local
   const mesesKeys = isDyn ? getFilteredKeys(cambiosMes) : null;
 
-  const periodoLabel = GLOBAL_FILTER==='all' ? 'Total' : GLOBAL_FILTER.toUpperCase();
+  const periodoLabel = periodoLabelCorto();
 
   // KPIs dinámicos
   if (isDyn) {
@@ -2987,7 +3066,7 @@ function renderDespachos(d) {
   const pct  = totV ? ((totE/totV)*100).toFixed(2) : 0;
   const best = dp.length ? [...dp].sort((a,b)=>a.pct-b.pct)[0] : null;
   const worst= dp.length ? [...dp].sort((a,b)=>b.pct-a.pct)[0] : null;
-  const periodoLabel = GLOBAL_FILTER==='all' ? 'Total' : GLOBAL_FILTER.toUpperCase();
+  const periodoLabel = periodoLabelCorto();
 
   document.getElementById('kpi-desp').innerHTML = [
     kpiCard('⚠️','Errores '+periodoLabel, totE, 'Ventas: '+totV.toLocaleString('es-CO'), 'var(--warn)'),
