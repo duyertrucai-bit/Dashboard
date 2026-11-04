@@ -570,12 +570,23 @@ tbody td { padding: 11px 12px; }
 
     <div class="card card-full" id="card-nuevas" style="margin-top:16px">
       <div class="card-stripe" style="background:linear-gradient(90deg,#8b5cf6,var(--accent),transparent)"></div>
-      <div class="card-header">
-        <div class="card-title">🆕 Sublíneas nuevas · Julio a Octubre</div>
-        <div class="card-sub">Información aparte de los productos de siempre. Pasa el cursor sobre las barras para ver el detalle.</div>
+      <div class="card-header" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <div>
+          <div class="card-title">🆕 Sublíneas nuevas</div>
+          <div class="card-sub">Aparte de los productos de siempre. Elige un mes o todos los meses; pasa el cursor sobre la torta para ver el detalle.</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <label class="pill" style="cursor:pointer">📥 Cargar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="nvImportar(this)"></label>
+        </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:16px">
-        <div style="flex:1;min-width:300px;position:relative;height:300px"><canvas id="ch-nuevas"></canvas></div>
+      <div id="nv-pills" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 8px"></div>
+      <div style="padding:0 16px 8px;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span>Ocultar las que tengan menos de</span>
+        <input type="number" id="nv-min" min="1" value="2" style="width:56px;padding:3px 6px" onchange="nvMin(this.value)">
+        <span>cambios</span><span id="nv-ocultas" style="color:var(--muted)"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;padding:0 16px 16px">
+        <div style="flex:1;min-width:300px;position:relative;height:320px"><canvas id="ch-nuevas"></canvas></div>
         <div class="tbl-wrap" id="tbl-nuevas" style="flex:1;min-width:300px"></div>
       </div>
     </div>
@@ -1309,9 +1320,9 @@ function _saveObsLocal() {
 let cambiosMes = 'todos';
 let cambiosMet = 'pct';
 const charts = {};
-// Sublíneas nuevas (desde Octubre): se muestran aparte, no en el cuadro de productos de siempre
-const SUBLINEAS_NUEVAS = ['Camiseta Rib Tank','Guantes Classic','Coderas','Cinturón Cuero PU','Guantes Training','Guantes Muñequera','Camiseta Oversize Flame','Short Essentials'];
-const _esNueva = p => SUBLINEAS_NUEVAS.some(n => String(p||'').trim().toLowerCase() === n.toLowerCase());
+// Productos "de siempre": todo lo demás se considera sublínea nueva y va en su sección aparte
+const PRODUCTOS_BASE = ['5mm','7mm Clásicas','7mm Pixel','Cinturón 10mm','Cinturón Neopreno','Guantes Lifting','Camiseta Compresión','Powerlifting','Cinturon crossfit','Otros'];
+const _esNueva = p => !PRODUCTOS_BASE.some(n => String(p||'').trim().toLowerCase() === n.toLowerCase());
 const _soloBase  = arr => (arr||[]).filter(p => !_esNueva(p.producto));
 const _soloNuevas = arr => (arr||[]).filter(p => _esNueva(p.producto));
 
@@ -2728,23 +2739,95 @@ function _pieTabla(rows,chart){
 function _pieToggle(i){ const c=charts['ch-cambios-pie']; if(!c) return; c.toggleDataVisibility(i); c.update(); _pieTabla(document.getElementById('pie-tabla')._rows,c); }
 
 
+let _nvMes='Todos', _nvMinV=(()=>{try{return Number(localStorage.getItem('nvMin'))||2}catch(e){return 2}})();
+function nvMin(v){ _nvMinV=Math.max(1,Number(v)||1); try{localStorage.setItem('nvMin',_nvMinV)}catch(e){} buildNuevasSeccion(); }
+function nvMesSel(m){ _nvMes=m; buildNuevasSeccion(); }
 function buildNuevasSeccion(){
   const card=document.getElementById('card-nuevas'); if(!card) return;
   const rows=(DATA.cambiosNuevas||[]);
-  const MESES4=['Julio','Agosto','Septiembre','Octubre'];
-  const keys=MESES4.map(m=>m+'|2026');
-  const tot=p=>keys.reduce((t,k)=>t+(p[k+'_abs']||0),0);
-  const lista=rows.filter(p=>tot(p)>0).sort((a,b)=>tot(b)-tot(a));
-  if(!lista.length){ card.style.display='none'; return; }
-  card.style.display='';
-  const COL=['#8b5cf6','#3b82f6','#10b981','#f59e0b'];
-  mkChart('ch-nuevas',{type:'bar',
-    data:{labels:lista.map(p=>p.producto),datasets:MESES4.map((m,i)=>({label:m,data:lista.map(p=>p[keys[i]+'_abs']||0),backgroundColor:COL[i],borderRadius:4}))},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,beginAtZero:true,ticks:{precision:0}},y:{stacked:true}},
-      plugins:{legend:{position:'bottom',labels:{boxWidth:12}},tooltip:{callbacks:{footer:items=>'Total: '+items.reduce((t,i)=>t+i.parsed.x,0)}}}}});
-  const celda=(p,k)=>{const n=p[k+'_abs']||0, pc=p[k+'_pct']||0; return n?`<b>${n}</b>${pc>0?` <span style="color:var(--muted);font-size:10px">(${pc.toFixed(1)}%)</span>`:''}`:'—';};
-  document.getElementById('tbl-nuevas').innerHTML='<table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Sublínea</th>'+MESES4.map(m=>`<th>${m.slice(0,3)}</th>`).join('')+'<th>Total</th></tr></thead><tbody>'+
-    lista.map(p=>`<tr><td style="font-weight:600">${p.producto}</td>${keys.map(k=>`<td style="text-align:center">${celda(p,k)}</td>`).join('')}<td style="text-align:center;font-weight:800">${tot(p)}</td></tr>`).join('')+'</tbody></table>';
+  const ORD=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const keys=Object.keys(rows.reduce((o,p)=>{Object.keys(p).forEach(k=>{ if(/_abs$/.test(k)&&p[k]>0) o[k.replace('_abs','')]=1; });return o;},{}))
+    .sort((a,b)=>{const[ma,ya]=a.split('|'),[mb,yb]=b.split('|');return ya!==yb?ya-yb:ORD.indexOf(ma)-ORD.indexOf(mb);});
+  const hayDatos=keys.length>0;
+  document.getElementById('nv-min').value=_nvMinV;
+  const pills=document.getElementById('nv-pills');
+  if(!hayDatos){ pills.innerHTML=''; document.getElementById('tbl-nuevas').innerHTML='<div style="color:var(--muted);padding:20px">Aún no hay sublíneas nuevas. Carga el Excel de cambios por sublínea.</div>'; if(charts['ch-nuevas']){charts['ch-nuevas'].destroy();delete charts['ch-nuevas'];} document.getElementById('nv-ocultas').textContent=''; return; }
+  const meses=keys.map(k=>k.split('|')[0]);
+  if(_nvMes!=='Todos'&&!meses.includes(_nvMes)) _nvMes='Todos';
+  pills.innerHTML=['Todos'].concat(meses).map(m=>`<button class="pill ${m===_nvMes?'active-green active':''}" onclick="nvMesSel('${m}')">${m==='Todos'?'📊 Todos los meses':m}</button>`).join('');
+  const selKeys=_nvMes==='Todos'?keys:keys.filter(k=>k.startsWith(_nvMes+'|'));
+  const val=p=>selKeys.reduce((t,k)=>t+(p[k+'_abs']||0),0);
+  const todas=rows.filter(p=>val(p)>0).sort((a,b)=>val(b)-val(a));
+  const lista=todas.filter(p=>val(p)>=_nvMinV), ocultas=todas.length-lista.length;
+  document.getElementById('nv-ocultas').textContent=ocultas?`· ${ocultas} oculta${ocultas>1?'s':''} por tener pocos cambios`:'';
+  const COL=['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6','#6366f1','#eab308'];
+  const total=lista.reduce((t,p)=>t+val(p),0)||1;
+  mkChart('ch-nuevas',{type:'doughnut',
+    data:{labels:lista.map(p=>p.producto),datasets:[{data:lista.map(val),backgroundColor:lista.map((p,i)=>COL[i%COL.length]),borderWidth:2,borderColor:'#fff',hoverOffset:14}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},
+      title:{display:true,text:(_nvMes==='Todos'?'Todos los meses':_nvMes)+' · '+total+' cambios'},
+      tooltip:{callbacks:{label:c=>{const t=c.dataset.data.reduce((a,b,i)=>a+(c.chart.getDataVisibility(i)?b:0),0)||1;return ' '+c.label+': '+c.parsed+' ('+(c.parsed/t*100).toFixed(1)+'%)';}}}}}});
+  const celda=(p,k)=>{const n=p[k+'_abs']||0; return n?`<b>${n}</b>`:'—';};
+  document.getElementById('tbl-nuevas').innerHTML='<table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Sublínea</th>'+meses.map(m=>`<th>${m.slice(0,3)}</th>`).join('')+'<th>Total</th></tr></thead><tbody>'+
+    lista.map(p=>`<tr><td style="font-weight:600">${p.producto}</td>${keys.map(k=>`<td style="text-align:center;${selKeys.includes(k)?'':'opacity:.4'}">${celda(p,k)}</td>`).join('')}<td style="text-align:center;font-weight:800">${val(p)}</td></tr>`).join('')+'</tbody></table>';
+}
+
+// ── Importar Excel "CAMBIOS POR SUBLINEA": columnas por mes, un nombre de producto por fila ──
+function nvNorm(t){ return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function nvSublinea(raw){
+  let n=nvNorm(raw).replace(/\s*-\s*(NEGRO|NEGRA|AZUL.*|VERDE|ROJO|ROSADO|LILA|GRIS|PURPURA|SPECTRAL|BLANCO)$/,'').trim();
+  const R=[[/CINTURON.*NEOPRENO/,'Cinturón Neopreno'],[/CINTURON.*CUERO.*PU/,'Cinturón Cuero PU'],[/CINTURON.*CUERO.*5 ?MM|CINTURON.*5 ?MM/,'5mm'],[/CINTURON.*(PALANCA|10 ?MM)/,'Cinturón 10mm'],
+   [/RODILLERAS.*PIXEL/,'7mm Pixel'],[/RODILLERAS/,'7mm Clásicas'],[/GUANTES.*LIFTING/,'Guantes Lifting'],[/GUANTES.*CLASSIC/,'Guantes Classic'],[/GUANTES.*TRAINING/,'Guantes Training'],
+   [/GUANTES.*(MUNEQUERA)/,'Guantes Muñequera'],[/GUANTES.*PRO.*DESCUBIERTOS/,'Guantes Pro Descubiertos'],[/COMPRESION/,'Camiseta Compresión'],[/RIB TANK/,'Camiseta Rib Tank'],
+   [/OVERSIZE.*FLAME/,'Camiseta Oversize Flame'],[/SUPER SLIM/,'Camiseta Super Slim Tee'],[/STRINGER|CAMISILLA/,'Camisilla Stringer'],[/SHORT.*SLIM/,'Short Slim Essentials'],[/SHORT/,'Short Essentials'],
+   [/CODERAS/,'Coderas'],[/STRAPS/,'Straps']];
+  for(const [re,nom] of R) if(re.test(n)) return {nom,auto:false};
+  const limpio=n.replace(/\bGYM\b/g,'').replace(/\s+/g,' ').trim().toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase());
+  return {nom:limpio||'Otros',auto:true};
+}
+async function nvImportar(inp){
+  const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+    const ORD=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    let hr=-1; for(let i=0;i<Math.min(8,aoa.length);i++){ if((aoa[i]||[]).some(c=>ORD.includes(nvNorm(c)))){hr=i;break;} }
+    if(hr<0){ alert('No encontré los meses (JULIO, AGOSTO...) en la fila de encabezados.'); return; }
+    const res={}, auto={};
+    (aoa[hr]||[]).forEach((c,ci)=>{
+      const m=nvNorm(c); if(!ORD.includes(m)) return;
+      const mes=m.charAt(0)+m.slice(1).toLowerCase();
+      for(let r=hr+1;r<aoa.length;r++){ const v=aoa[r][ci]; if(!String(v||'').trim()) continue;
+        const s=nvSublinea(v); res[mes]=res[mes]||{}; res[mes][s.nom]=(res[mes][s.nom]||0)+1; if(s.auto) auto[s.nom]=1; }
+    });
+    const anio=2026, filas=[];
+    Object.keys(res).forEach(mes=>Object.keys(res[mes]).forEach(p=>{
+      const ya=(DATA.cambios||[]).concat(DATA.cambiosNuevas||[]).some(x=>x.producto===p&&(x[mes+'|'+anio+'_abs']||0)>0);
+      filas.push({mes,anio,producto:p,cambios:res[mes][p],ya});
+    }));
+    if(!filas.length){ alert('No encontré productos en el archivo.'); return; }
+    window._nvFilas=filas;
+    const nuevas=filas.filter(x=>!x.ya).length;
+    const ov=document.createElement('div'); ov.id='nv-ov'; ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML=`<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:14px;max-width:560px;width:100%;max-height:85vh;overflow:auto;padding:18px">
+      <h3 style="margin-bottom:6px">📥 Cambios detectados en el Excel</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${filas.length} combinaciones mes/sublínea · ${nuevas} por cargar${filas.length-nuevas?` · ${filas.length-nuevas} ya existen y se omiten`:''}${Object.keys(auto).length?` · nombres nuevos detectados: ${Object.keys(auto).join(', ')}`:''}</div>
+      <table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Mes</th><th style="text-align:left">Sublínea</th><th>Cambios</th><th></th></tr></thead><tbody>${filas.map(x=>`<tr style="${x.ya?'opacity:.45':''}"><td>${x.mes}</td><td>${x.producto}</td><td style="text-align:center"><b>${x.cambios}</b></td><td>${x.ya?'ya existe':''}</td></tr>`).join('')}</tbody></table>
+      <div id="nv-msg" style="margin-top:10px;font-size:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="pill" onclick="document.getElementById('nv-ov').remove()">Cancelar</button><button class="pill active-green active" id="nv-go" onclick="nvGuardar()" ${nuevas?'':'disabled'}>Cargar ${nuevas} a la base de datos</button></div></div>`;
+    document.body.appendChild(ov);
+  }catch(e){ alert('No pude leer el archivo: '+e.message); }
+}
+async function nvGuardar(){
+  const go=document.getElementById('nv-go'), msg=document.getElementById('nv-msg'); go.disabled=true;
+  const todo=(window._nvFilas||[]).filter(x=>!x.ya); let ok=0, fallo=0;
+  for(const x of todo){
+    msg.textContent=`⏳ Cargando ${ok+fallo+1} de ${todo.length}...`;
+    try{ const r=await gasRequest({action:'addCambio',mes:x.mes,anio:x.anio,producto:x.producto,cambios:x.cambios,obs:''}); if(r&&(r.ok||r===true)) ok++; else fallo++; }catch(e){ fallo++; }
+  }
+  msg.innerHTML=`✅ ${ok} cargadas${fallo?` · ❌ ${fallo} con error`:''}. Sincronizando...`;
+  try{ await syncData(); }catch(e){}
+  setTimeout(()=>{ const o=document.getElementById('nv-ov'); if(o) o.remove(); },1200);
 }
 
 function buildCambiosChart(filteredKeys) {
