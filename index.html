@@ -567,6 +567,18 @@ tbody td { padding: 11px 12px; }
       </div>
       <div class="tbl-wrap" id="tbl-cambios"></div>
     </div>
+
+    <div class="card card-full" id="card-nuevas" style="margin-top:16px">
+      <div class="card-stripe" style="background:linear-gradient(90deg,#8b5cf6,var(--accent),transparent)"></div>
+      <div class="card-header">
+        <div class="card-title">🆕 Sublíneas nuevas · Julio a Octubre</div>
+        <div class="card-sub">Información aparte de los productos de siempre. Pasa el cursor sobre las barras para ver el detalle.</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px">
+        <div style="flex:1;min-width:300px;position:relative;height:300px"><canvas id="ch-nuevas"></canvas></div>
+        <div class="tbl-wrap" id="tbl-nuevas" style="flex:1;min-width:300px"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ─ DESPACHOS ───────────────────────────────────────── -->
@@ -1297,6 +1309,11 @@ function _saveObsLocal() {
 let cambiosMes = 'todos';
 let cambiosMet = 'pct';
 const charts = {};
+// Sublíneas nuevas (desde Octubre): se muestran aparte, no en el cuadro de productos de siempre
+const SUBLINEAS_NUEVAS = ['Camiseta Rib Tank','Guantes Classic','Coderas','Cinturón Cuero PU','Guantes Training','Guantes Muñequera','Camiseta Oversize Flame','Short Essentials'];
+const _esNueva = p => SUBLINEAS_NUEVAS.some(n => String(p||'').trim().toLowerCase() === n.toLowerCase());
+const _soloBase  = arr => (arr||[]).filter(p => !_esNueva(p.producto));
+const _soloNuevas = arr => (arr||[]).filter(p => _esNueva(p.producto));
 
 // ── FILTRO GLOBAL POR TRIMESTRE ───────────────────────────────
 let GLOBAL_FILTER = 'all'; // 'all' | 'q1' | 'q2' | 'q3' | 'q4'
@@ -1990,7 +2007,8 @@ function parseDashboardData(json) {
   return {
     ventas_nov:          vn.length ? vn : FALLBACK.ventas_nov,
     despachos:           dp.length ? dp : FALLBACK.despachos,
-    cambios:             usarCambiosSheets ? cambiosDyn : FALLBACK.cambios,
+    cambios:             _soloBase(usarCambiosSheets ? cambiosDyn : FALLBACK.cambios),
+    cambiosNuevas:       _soloNuevas(cambiosDyn),
     devoluciones:        devArr.length ? devArr : FALLBACK.devoluciones,
     _mesesKeys:          usarCambiosSheets ? mesesKeys : FALLBACK._mesesKeys,
     motivo_devolucion:   motivoArr.length ? motivoArr : FALLBACK.motivo_devolucion,
@@ -2213,7 +2231,8 @@ function parseSheetData(json) {
   return {
     ventas_nov:          vn.length ? vn : FALLBACK.ventas_nov,
     despachos:           dpEnriquecido.length ? dpEnriquecido : FALLBACK.despachos,
-    cambios:             (cambiosDyn.length && !allPctZero) ? cambiosDyn : FALLBACK.cambios,
+    cambios:             _soloBase((cambiosDyn.length && !allPctZero) ? cambiosDyn : FALLBACK.cambios),
+    cambiosNuevas:       _soloNuevas(cambiosDyn),
     devoluciones:        devArr.length ? devArr : FALLBACK.devoluciones,
     motivo_devolucion:   FALLBACK.motivo_devolucion, // se carga vía syncData desde _motivoRaw
     _mesesKeys:          (!allPctZero && mesesOrdenados.length) ? mesesOrdenados : null,
@@ -2708,7 +2727,28 @@ function _pieTabla(rows,chart){
 }
 function _pieToggle(i){ const c=charts['ch-cambios-pie']; if(!c) return; c.toggleDataVisibility(i); c.update(); _pieTabla(document.getElementById('pie-tabla')._rows,c); }
 
+
+function buildNuevasSeccion(){
+  const card=document.getElementById('card-nuevas'); if(!card) return;
+  const rows=(DATA.cambiosNuevas||[]);
+  const MESES4=['Julio','Agosto','Septiembre','Octubre'];
+  const keys=MESES4.map(m=>m+'|2026');
+  const tot=p=>keys.reduce((t,k)=>t+(p[k+'_abs']||0),0);
+  const lista=rows.filter(p=>tot(p)>0).sort((a,b)=>tot(b)-tot(a));
+  if(!lista.length){ card.style.display='none'; return; }
+  card.style.display='';
+  const COL=['#8b5cf6','#3b82f6','#10b981','#f59e0b'];
+  mkChart('ch-nuevas',{type:'bar',
+    data:{labels:lista.map(p=>p.producto),datasets:MESES4.map((m,i)=>({label:m,data:lista.map(p=>p[keys[i]+'_abs']||0),backgroundColor:COL[i],borderRadius:4}))},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,beginAtZero:true,ticks:{precision:0}},y:{stacked:true}},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12}},tooltip:{callbacks:{footer:items=>'Total: '+items.reduce((t,i)=>t+i.parsed.x,0)}}}}});
+  const celda=(p,k)=>{const n=p[k+'_abs']||0, pc=p[k+'_pct']||0; return n?`<b>${n}</b>${pc>0?` <span style="color:var(--muted);font-size:10px">(${pc.toFixed(1)}%)</span>`:''}`:'—';};
+  document.getElementById('tbl-nuevas').innerHTML='<table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Sublínea</th>'+MESES4.map(m=>`<th>${m.slice(0,3)}</th>`).join('')+'<th>Total</th></tr></thead><tbody>'+
+    lista.map(p=>`<tr><td style="font-weight:600">${p.producto}</td>${keys.map(k=>`<td style="text-align:center">${celda(p,k)}</td>`).join('')}<td style="text-align:center;font-weight:800">${tot(p)}</td></tr>`).join('')+'</tbody></table>';
+}
+
 function buildCambiosChart(filteredKeys) {
+  try{ buildNuevasSeccion(); }catch(e){ console.error(e); }
   try{ buildCambiosPie(filteredKeys); }catch(e){ console.error(e); }
   const srcData  = (DATA.cambios && DATA.cambios.length) ? DATA : FALLBACK;
   const isDyn    = !!(srcData._mesesKeys);
