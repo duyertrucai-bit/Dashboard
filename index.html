@@ -548,6 +548,17 @@ tbody td { padding: 11px 12px; }
         </div>
         <canvas id="ch-cambios" style="max-height:300px"></canvas>
       </div>
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-stripe" style="background:linear-gradient(90deg,var(--accent),var(--warn),transparent)"></div>
+        <div class="card-header">
+          <div class="card-title">Cambios por Sublínea</div>
+          <div class="card-sub" id="pie-sub">Toca una sublínea en la leyenda para ocultarla o mostrarla · pasa el cursor para ver el detalle</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:center">
+          <div style="position:relative;width:min(100%,420px);height:340px"><canvas id="ch-cambios-pie"></canvas></div>
+          <div id="pie-tabla" style="flex:1;min-width:240px"></div>
+        </div>
+      </div>
     </div>
     <div class="card card-full">
       <div class="card-stripe" style="background:linear-gradient(90deg,var(--warn),transparent)"></div>
@@ -690,8 +701,7 @@ tbody td { padding: 11px 12px; }
         <div class="form-group">
           <label>Producto *</label>
           <select id="dev-prod">
-            <option>5mm</option><option>7mm Clásicas</option><option>7mm Pixel</option>
-            <option>Cinturón 10mm</option><option>Powerlifting</option><option>Cinturon crossfit</option><option>Otros</option>
+            <option>5mm</option><option>7mm Clásicas</option><option>7mm Pixel</option><option>Cinturón 10mm</option><option>Cinturón Neopreno</option><option>Cinturón Cuero PU</option><option>Guantes Lifting</option><option>Guantes Classic</option><option>Guantes Training</option><option>Guantes Muñequera</option><option>Camiseta Compresión</option><option>Camiseta Rib Tank</option><option>Camiseta Oversize Flame</option><option>Short Essentials</option><option>Coderas</option><option>Powerlifting</option><option>Cinturon crossfit</option><option>Otros</option>
           </select>
         </div>
         <div class="form-group">
@@ -2665,7 +2675,41 @@ function renderCambios() {
   buildCambiosTable(fk);
 }
 
+
+// ── Torta interactiva: cambios por sublínea (respeta filtros de trimestre/mes) ──
+const PIE_COLORS=['#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6','#6366f1','#eab308','#a855f7','#22c55e','#64748b','#0ea5e9','#d946ef','#fb7185'];
+let _pieSel=null;
+function buildCambiosPie(filteredKeys){
+  const srcData=(DATA.cambios&&DATA.cambios.length)?DATA:FALLBACK;
+  const keys=filteredKeys||[];
+  const rows=(srcData.cambios||[]).map(p=>({n:p.producto,v:keys.reduce((t,k)=>t+(p[k+'_abs']||0),0)})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
+  const total=rows.reduce((t,r)=>t+r.v,0);
+  const sub=document.getElementById('pie-sub');
+  if(sub) sub.textContent=total+' cambios en el período · toca una sublínea en la leyenda o en la tabla para ocultarla/mostrarla';
+  const tb=document.getElementById('pie-tabla');
+  if(!rows.length){ if(charts['ch-cambios-pie']){charts['ch-cambios-pie'].destroy();delete charts['ch-cambios-pie'];} if(tb) tb.innerHTML='<div style="color:var(--muted);padding:20px;text-align:center">Sin cambios en el período</div>'; return; }
+  const ch=mkChart('ch-cambios-pie',{
+    type:'doughnut',
+    data:{labels:rows.map(r=>r.n),datasets:[{data:rows.map(r=>r.v),backgroundColor:rows.map((r,i)=>PIE_COLORS[i%PIE_COLORS.length]),borderWidth:2,borderColor:'#fff',hoverOffset:14}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>{const t=c.dataset.data.reduce((a,b,i)=>a+(c.chart.getDataVisibility(i)?b:0),0)||1; return ' '+c.label+': '+c.parsed+' cambios ('+(c.parsed/t*100).toFixed(1)+'%)';}}}},
+      onClick:(e,els,chart)=>{ if(els.length){ chart.toggleDataVisibility(els[0].index); chart.update(); _pieTabla(rows,chart); } }}
+  });
+  _pieTabla(rows,ch);
+}
+function _pieTabla(rows,chart){
+  const tb=document.getElementById('pie-tabla'); if(!tb||!chart) return;
+  const vis=rows.map((r,i)=>chart.getDataVisibility(i));
+  const tot=rows.reduce((t,r,i)=>t+(vis[i]?r.v:0),0)||1;
+  tb.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="text-align:left;color:var(--muted)"><th></th><th>Sublínea</th><th style="text-align:right">Cambios</th><th style="text-align:right">%</th></tr></thead><tbody>'+
+    rows.map((r,i)=>`<tr style="cursor:pointer;opacity:${vis[i]?1:.35}" onclick="_pieToggle(${i})"><td style="padding:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${PIE_COLORS[i%PIE_COLORS.length]}"></span></td><td>${r.n}</td><td style="text-align:right;font-weight:700">${r.v}</td><td style="text-align:right">${vis[i]?(r.v/tot*100).toFixed(1)+'%':'—'}</td></tr>`).join('')+'</tbody></table>';
+  tb._rows=rows;
+}
+function _pieToggle(i){ const c=charts['ch-cambios-pie']; if(!c) return; c.toggleDataVisibility(i); c.update(); _pieTabla(document.getElementById('pie-tabla')._rows,c); }
+
 function buildCambiosChart(filteredKeys) {
+  try{ buildCambiosPie(filteredKeys); }catch(e){ console.error(e); }
   const srcData  = (DATA.cambios && DATA.cambios.length) ? DATA : FALLBACK;
   const isDyn    = !!(srcData._mesesKeys);
   if (isDyn) {
@@ -4002,7 +4046,7 @@ function abrirFormEdicion(idx) {
   document.getElementById('edit-form-card').scrollIntoView({ behavior:'smooth', block:'start' });
 
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const PRODUCTOS = ['5mm','7mm Clásicas','7mm Pixel','Cinturón 10mm','Powerlifting','Cinturon crossfit','Otros'];
+  const PRODUCTOS = ['5mm', '7mm Clásicas', '7mm Pixel', 'Cinturón 10mm', 'Cinturón Neopreno', 'Cinturón Cuero PU', 'Guantes Lifting', 'Guantes Classic', 'Guantes Training', 'Guantes Muñequera', 'Camiseta Compresión', 'Camiseta Rib Tank', 'Camiseta Oversize Flame', 'Short Essentials', 'Coderas', 'Powerlifting', 'Cinturon crossfit', 'Otros'];
   const TIPOS_NOV = ['Cambio','Devolución','Garantía','Otro'];
 
   const baseCols2 = SHEET_BASE_COLS[_editSheet] || meta.cols;
@@ -4057,7 +4101,7 @@ function abrirNuevaFila() {
   document.getElementById('edit-form-card').scrollIntoView({ behavior:'smooth', block:'start' });
 
   const MESES     = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const PRODUCTOS = ['5mm','7mm Clásicas','7mm Pixel','Cinturón 10mm','Powerlifting','Cinturon crossfit','Otros'];
+  const PRODUCTOS = ['5mm', '7mm Clásicas', '7mm Pixel', 'Cinturón 10mm', 'Cinturón Neopreno', 'Cinturón Cuero PU', 'Guantes Lifting', 'Guantes Classic', 'Guantes Training', 'Guantes Muñequera', 'Camiseta Compresión', 'Camiseta Rib Tank', 'Camiseta Oversize Flame', 'Short Essentials', 'Coderas', 'Powerlifting', 'Cinturon crossfit', 'Otros'];
   const TIPOS_NOV = ['Cambio','Devolución','Garantía','Otro'];
   const baseCols  = SHEET_BASE_COLS[_editSheet] || meta.cols;
 
